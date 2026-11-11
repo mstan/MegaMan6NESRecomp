@@ -12,7 +12,7 @@
 #include <string.h>
 #define R(a) cyc_mod_peek((uint16_t)(a))
 #define P(a,v) cyc_mod_poke((uint16_t)(a),(uint8_t)(v))
-typedef struct {char magic[4];uint8_t on,previous,pending,reserved;uint64_t changes;} Controls;
+typedef struct {char magic[4];uint8_t on,previous,pending,hurt;uint64_t changes;} Controls;
 static Controls S;
 static int s_on;
 static uint8_t *s_cart;
@@ -51,8 +51,10 @@ static int palette(unsigned id,uint8_t out[32]) {
 static int safe(void) {
     /* Native Start is evaluated here only in the live player loop. The
      * frozen bit marks the retail menu; nonzero 9B is a Rush adapter form. */
-    return s_cart && R(0x3e5) && !R(0x9a) && !R(0x9b) && !(R(0x3b7)&2);
+    return s_cart && R(0x3a0) && R(0x3e5)<28 && !S.hurt && !R(0x9a) && !R(0x9b) && !(R(0x3b7)&2);
 }
+static int hurt_begin(uint16_t address) {(void)address;S.hurt=1;S.pending=0;return 0;}
+static int hurt_end(uint16_t address) {(void)address;S.hurt=0;S.pending=0;return 0;}
 static int dispatch(uint16_t address) {
     (void)address;
     unsigned fresh=S.pending;S.pending=0;
@@ -77,6 +79,9 @@ static int dispatch(uint16_t address) {
 static void enabled(int on) {
     s_on=on!=0;S.previous=S.pending=0;
     nes_mod_set_function_hook_enabled("mm6.player.inventory",s_on);
+    nes_mod_set_function_hook_enabled("mm6.controls.hurt",s_on);
+    nes_mod_set_function_hook_enabled("mm6.controls.hurt-end",s_on);
+    nes_mod_set_function_hook_enabled("mm6.controls.arrival",s_on);
 }
 static void input(void *ctx,uint8_t buttons[2]) {
     (void)ctx;(void)buttons;
@@ -96,7 +101,7 @@ static void power(void *ctx) {
 static void end(void *ctx) {
     (void)ctx;if(!safe())S.pending=0;
     if(s_log)fprintf(s_log,"{\"frame\":%u,\"weapon\":%u,\"form\":%u,\"state\":%u,\"hurt\":%u,\"hp\":%u,\"charge\":%u,\"held\":%u,\"changes\":%llu}\n",
-        cyc_ring_frame,R(0x699),R(0x9b),R(0xa7),R(0x9a),R(0x3e5),R(0x9e),S.previous,(unsigned long long)S.changes);
+        cyc_ring_frame,R(0x699),R(0x9b),R(0xa7),S.hurt,R(0x3e5),R(0x9e),S.previous,(unsigned long long)S.changes);
 }
 static bool option(void *ctx,const char *name,const char *value) {
     (void)ctx;
@@ -106,19 +111,22 @@ static bool option(void *ctx,const char *name,const char *value) {
 }
 static int get(uint8_t *out,int capacity) {
     if(capacity<sizeof S)return -1;
-    memcpy(S.magic,"M6WC",4);S.on=(uint8_t)s_on;memcpy(out,&S,sizeof S);return sizeof S;
+    memcpy(S.magic,"M6W2",4);S.on=(uint8_t)s_on;memcpy(out,&S,sizeof S);return sizeof S;
 }
 static int valid(const uint8_t *in,int len) {
     if(!len)return !s_on;
     if(!in || len!=sizeof S)return 0;
     Controls p;memcpy(&p,in,sizeof p);
-    return !memcmp(p.magic,"M6WC",4) && p.on==s_on && p.previous<=3 && p.pending<=3 && !p.reserved;
+    return !memcmp(p.magic,"M6W2",4) && p.on==s_on && p.previous<=3 && p.pending<=3 && p.hurt<=1;
 }
 static int set(const uint8_t *in,int len) {if(!valid(in,len))return 0;if(len)memcpy(&S,in,sizeof S);else memset(&S,0,sizeof S);return 1;}
 static void reset(void){enabled(0);}
 static void activate(void){enabled(1);}
 NES_MOD_CONSTRUCTOR(register_mm6_controls) {
     nes_mod_register_function_entry_plugin("mm6.player.inventory",0x924d,dispatch);
+    nes_mod_register_function_entry_plugin("mm6.controls.hurt",0x84b0,hurt_begin);
+    nes_mod_register_function_entry_plugin("mm6.controls.hurt-end",0x851a,hurt_end);
+    nes_mod_register_function_entry_plugin("mm6.controls.arrival",0x802d,hurt_end);
     nes_mod_register_savestate_hook("mm6.controls",get,set);nes_mod_register_savestate_validator("mm6.controls",valid);
     nes_mod_register_reset_callback(reset);nes_mod_register_activation_plugin("mega-man-6-usa.weapons",activate);
 }

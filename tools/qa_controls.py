@@ -31,7 +31,8 @@ def main():
     for name,route,frames,on,paired in [('off','boot-play',5220,False,False),
                                       ('idle','boot-play',5220,True,False),
                                       ('gallery','weapon-gallery',4620,True,True),
-                                      ('native-beat','native-beat-graphics',4620,False,False)]:
+                                      ('native-beat','native-beat-graphics',4620,False,False),
+                                      ('hurt','hurt-cycle',4270,True,True)]:
         case=out/name
         cmd=[sys.executable,str(ROOT/'tools/qa_route.py'),str(ROOT/f'tests/routes/{route}.route'),
              '--exe',a.exe,'--rom',a.rom,'--out',str(case),'--frames',str(frames),'--shot-every','800']
@@ -70,6 +71,21 @@ def main():
     checks['held_cold_continuation']=continued=={k:v for k,v in full.items() if k>4104} and bool(continued)
     checks['held_cold_memory']=(cold/'mem.txt').read_bytes()==(out/'gallery/mem_end.txt').read_bytes()
     checks['held_cold_picture']=(cold/'final.png').read_bytes()==(out/'gallery/s.png').read_bytes()
+    hurt=[json.loads(s) for s in (out/'hurt/controls.jsonl').read_text().splitlines()]
+    events=[r for p,r in zip(hurt,hurt[1:]) if r['changes']!=p['changes']]
+    checks['actual_native_recoil']=hurt[4213]['hp']==24 and all(r['hurt']==1 for r in hurt[4214:4242])
+    checks['hurt_press_discarded']=all(r['changes']==0 for r in hurt[4217:4247])
+    checks['fresh_press_after_recoil']=len(events)==1 and events[0]['frame']==4249 and events[0]['weapon']==1
+    continued_hurt=out/'cold-hurt';continued_hurt.mkdir(exist_ok=True)
+    cmd=[a.exe,a.rom,'--no-save','--config',str(continued_hurt/'config.ini'),'--frames','4270',
+         '--input',str(out/'hurt/input.txt'),'--weapon-cycle','on','--load-state',str(out/'hurt/hurt.cycstate'),
+         '--hash-out',str(continued_hurt/'cold.hash'),'--screenshot',str(continued_hurt/'final.png'),
+         '--mem-frame','4269','--mem-out',str(continued_hurt/'mem.txt')]
+    with (continued_hurt/'run.log').open('w') as log:subprocess.run(cmd,check=True,stdout=log,stderr=subprocess.STDOUT,env=env)
+    full=qa_route.load_hashes(out/'hurt/native.hash');tail=qa_route.load_hashes(continued_hurt/'cold.hash')
+    checks['hurt_cold_hashes']=len(tail)==55 and tail=={f:h for f,h in full.items() if f>4214}
+    checks['hurt_cold_memory']=(continued_hurt/'mem.txt').read_bytes()==(out/'hurt/mem_end.txt').read_bytes()
+    checks['hurt_cold_picture']=(continued_hurt/'final.png').read_bytes()==(out/'hurt/s.png').read_bytes()
     result=dict(checks=checks,passed=all(checks.values()),executable_sha256=hashlib.sha256(Path(a.exe).read_bytes()).hexdigest())
     (out/'checks.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
     return 0 if result['passed'] else 1

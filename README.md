@@ -25,6 +25,8 @@ The route helper is adapted from MegaMan2NESRecomp under the included license an
 
 The default-on optional package maps L/R (LB/RB) to the previous/next acquired weapon or Beat in normal form. It wraps, skips locked equipment and includes empty weapons. Held presses change once; simultaneous shoulders cancel. The native inventory chooses Jet and Power adapters, whose native weapon restrictions are retained. Native graphics, palettes and personal shot cleanup come from the supplied cartridge's own tables.
 
+Presses during recoil are discarded. A new press after recovery works normally, including at the native life meter's last unit.
+
 ```text
 python tools/qa_controls.py --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/controls
 ```

@@ -8,3 +8,21 @@ id = "mm6.player.inventory"
 addr = 0x924D
 length = 8
 crc32 = 0x765A3C40
+
+[[mod_function_hook]]
+id = "mm6.controls.hurt"
+addr = 0x84B0
+length = 8
+crc32 = 0xC80FC743
+
+[[mod_function_hook]]
+id = "mm6.controls.hurt-end"
+addr = 0x851A
+length = 8
+crc32 = 0xB45581A2
+
+[[mod_function_hook]]
+id = "mm6.controls.arrival"
+addr = 0x802D
+length = 8
+crc32 = 0x2530005F
