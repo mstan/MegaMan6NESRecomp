@@ -2,3 +2,9 @@
 name = "Mega Man 6"
 output_prefix = "mega-man-6"
 console = "nes"
+
+[[mod_function_hook]]
+id = "mm6.player.inventory"
+addr = 0x924D
+length = 8
+crc32 = 0x765A3C40
