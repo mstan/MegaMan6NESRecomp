@@ -1,5 +1,6 @@
 /* Keep MM6's coroutine, native charge, slide and adapter mechanisms intact. */
 #include "mm6_proto.h"
+#include "mm6_coop.h"
 #include "mm6_proto_sheet.h"
 #include "cyc_mod.h"
 #include "cyc_ring.h"
@@ -19,12 +20,13 @@ typedef struct {
     uint64_t switches,limited,blocks,reflections,damage_events;
     uint8_t last_enemy,last_damage;
 } ProtoState;
-static ProtoState S;
+static ProtoState s_players[2];
+#define S (s_players[mm6_coop_seat()])
 static CycProtoAtlas s_atlas;
 static int s_loaded,s_on,s_mode=1,s_start=1;
 int mm6_proto_enabled(void) {return s_on;}
-int mm6_proto_selected(void) {return s_on && S.selected;}
-int mm6_proto_swapping(void) {return s_on && S.teleport;}
+int mm6_proto_selected(void) {int character=mm6_coop_character();return s_on && (character>=0?character:S.selected);}
+int mm6_proto_swapping(void) {return s_on && !mm6_coop_enabled() && S.teleport;}
 const CycProtoAtlas *mm6_proto_atlas(void) {return s_loaded?&s_atlas:NULL;}
 void mm6_proto_animation(int animation) {S.native_animation=(uint8_t)animation;}
 static int safe(void) {
@@ -32,7 +34,7 @@ static int safe(void) {
         !(R(0x3b7)&2) && R(0x94)!=3 && !R(0x47) && !R(0x60);
 }
 int mm6_proto_dispatch(void) {
-    if(!s_on || cyc_mod_isolated())return 0;
+    if(!s_on || mm6_coop_enabled() || cyc_mod_isolated())return 0;
     if(!S.teleport && (R(0x42)&32) && safe()) {
         S.teleport=1;S.switches++;S.saved_inv=R(0xa2);
         S.saved_phase=R(0x510);S.saved_timer=R(0x555);
@@ -128,7 +130,7 @@ static int shield(uint16_t address) {
 }
 void mm6_proto_body(Mm6ProtoBody *b) {
     memset(b,0,sizeof *b);
-    b->active=(uint8_t)(s_on && (S.selected || S.teleport) && R(0x3a0)==4 && R(0x3e5)<28);
+    b->active=(uint8_t)((mm6_proto_selected() || S.teleport) && R(0x3a0)==4 && R(0x3e5)<28);
     b->x=(uint8_t)(R(0x486)-R(0xf7));b->y=(uint8_t)(R(0x4cb)-R(0xf9));
     b->right=(R(0x3b7)&64)!=0;b->flipped=(R(0x3b7)&128)!=0;b->behind=(R(0x3b7)&32)!=0;
     b->weapon=R(0x699);b->charge=R(0x9e);b->form=R(0x9b)<=2?R(0x9b):0;
@@ -154,9 +156,11 @@ void mm6_proto_body(Mm6ProtoBody *b) {
         if(b->form || !known)b->active=0;
     }
 }
-void mm6_proto_power(void) {memset(&S,0,sizeof S);S.selected=(uint8_t)s_start;S.native_animation=255;mm6_view_power();}
+void mm6_proto_power(void) {memset(s_players,0,sizeof s_players);for(int i=0;i<2;i++){s_players[i].selected=(uint8_t)s_start;s_players[i].native_animation=255;}mm6_view_power();}
 void mm6_proto_end(void) {
-    for(int slot=1;slot<=3;slot++)if(R(0x3a0+slot)!=9){S.reflected[slot-1]=S.pending[slot-1]=0;}
+    for(int seat=0;seat<(mm6_coop_enabled()?2:1);seat++)for(int slot=1;slot<=3;slot++)
+        if(mm6_coop_read(seat,0x3A0+slot)!=9){s_players[seat].reflected[slot-1]=s_players[seat].pending[slot-1]=0;}
+    if(mm6_coop_enabled())return;
     if(!s_on || !S.teleport)return;
     P(0xa2,2);P(0x555,255);
     if(S.teleport==16){S.selected^=1;P(0xdc,0x24);}
@@ -176,15 +180,17 @@ bool mm6_proto_set(int enabled,int mode,int start) {
     for(int i=0;i<sizeof ids/sizeof *ids;i++){char id[48];snprintf(id,sizeof id,"mm6.proto.%s",ids[i]);nes_mod_set_function_hook_enabled(id,s_on);}
     nes_mod_set_local_only("MM6 Proto Man (unqualified netplay)",s_on);mm6_controls_refresh();mm6_view_enable(s_on);return true;
 }
-static int get(uint8_t *out,int cap) {if(cap<sizeof S)return -1;memcpy(S.magic,"M6P1",4);S.enabled=(uint8_t)s_on;S.mode=(uint8_t)s_mode;memcpy(out,&S,sizeof S);return sizeof S;}
+static int get(uint8_t *out,int cap) {if(cap<sizeof s_players)return -1;for(int i=0;i<2;i++){memcpy(s_players[i].magic,"M6P2",4);s_players[i].enabled=(uint8_t)s_on;s_players[i].mode=(uint8_t)s_mode;}memcpy(out,s_players,sizeof s_players);return sizeof s_players;}
 static int valid(const uint8_t *in,int len) {
-    if(!len)return !s_on;if(!in || len!=sizeof S)return 0;
-    ProtoState p;memcpy(&p,in,sizeof p);
-    if(memcmp(p.magic,"M6P1",4) || p.enabled!=s_on || p.mode!=s_mode || p.selected>1 || p.teleport>32)return 0;
-    for(int i=0;i<3;i++)if(p.reflected[i]>1 || p.pending[i]>1 || p.muzzle[i]>1 || p.reflection[i].right>1)return 0;
+    if(!len)return !s_on;if(!in || len!=sizeof s_players)return 0;
+    ProtoState p[2];memcpy(p,in,sizeof p);
+    for(int seat=0;seat<2;seat++){
+        if(memcmp(p[seat].magic,"M6P2",4) || p[seat].enabled!=s_on || p[seat].mode!=s_mode || p[seat].selected>1 || p[seat].teleport>32)return 0;
+        for(int i=0;i<3;i++)if(p[seat].reflected[i]>1 || p[seat].pending[i]>1 || p[seat].muzzle[i]>1 || p[seat].reflection[i].right>1)return 0;
+    }
     return 1;
 }
-static int set(const uint8_t *in,int len) {if(!valid(in,len))return 0;if(len)memcpy(&S,in,sizeof S);else memset(&S,0,sizeof S);return 1;}
+static int set(const uint8_t *in,int len) {if(!valid(in,len))return 0;if(len)memcpy(s_players,in,sizeof s_players);else memset(s_players,0,sizeof s_players);return 1;}
 int mm6_proto_json(char *out,int cap) {
     return snprintf(out,cap,"\"proto\":%d,\"swap\":%u,\"native_anim\":%u,\"switches\":%llu,\"limited\":%llu,\"blocks\":%llu,\"reflections\":%llu,\"damage_events\":%llu,\"last_enemy\":%u,\"last_damage\":%u",mm6_proto_selected(),S.teleport,S.native_animation,(unsigned long long)S.switches,(unsigned long long)S.limited,(unsigned long long)S.blocks,(unsigned long long)S.reflections,(unsigned long long)S.damage_events,S.last_enemy,S.last_damage);
 }

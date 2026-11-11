@@ -43,11 +43,29 @@ MegaMan6Recomp.exe "/path/to/Mega Man 6 (USA).nes" --protoman on --proto-mode pr
 
 Select swaps characters using a 32-frame teleport. Proto Man retains the native charge and slide mechanisms, limits ordinary Buster shots to two, takes double native contact damage with normal recoil, and reflects the native small pellets (types 14/1A) while airborne and facing them without firing. `--proto-mode megaman` retains Mega Man's traits with Proto Man's artwork. `--proto-start megaman` starts as Mega Man.
 
-Native actor ownership identifies the body OAM parts; the compositor replaces those parts with the credited immutable sprite atlas. Native entry/effect animations and adapter forms currently retain their original artwork. Proto-themed Jet/Power forms, complete pose and projectile coverage, inventory portraits, launcher activation, co-op and netplay remain unfinished.
+Native actor ownership identifies the body OAM parts; the compositor replaces those parts with the credited immutable sprite atlas. Native entry/effect animations and adapter forms currently retain their original artwork. Proto-themed Jet/Power forms, complete pose and projectile coverage, inventory portraits and launcher activation remain unfinished.
 
 The initial gallery matches native/interpreter execution for 4,800 frames in both modes. Mid-swap and mid-recoil loads reproduce memory and presentation; actual contact deals 6 damage with Proto Man traits and 3 in reskin mode with the same recoil. A real native pellet reflects into a native Buster shot, which damages an enemy while a special weapon is selected. Rear, grounded, firing and reskin cases retain native damage. Mid-reflection continuation matches the uninterrupted picture, memory and PCM. These are targeted checks, not complete game acceptance.
 
 ```text
 python tools/qa_route.py tests/routes/proto-gallery.route --frames 4800 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/proto --extra=--protoman --extra=on
 python tools/qa_route.py tests/routes/proto-reflected-target.route --frames 4040 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/reflection --extra=--protoman --extra=on
+```
+
+## Development local co-op
+
+```text
+MegaMan6Recomp.exe "/path/to/Mega Man 6 (USA).nes" --coop on --weapon-cycle on
+```
+
+`--coop-roster protoman-megaman` reverses the two characters. Co-op enables the Proto Man dependency; `--proto-mode megaman` keeps both characters' native Mega Man traits. Each personal actor pool runs its original coroutine on the real game clock, while level actors run once. The partner uses the native animation and sprite emitter with personal weapon patterns and palettes. Controls, charge, slide, ordinary Buster limits, contact damage and airborne reflection belong to each seat.
+
+Either controller can open and operate its own native inventory while the world pauses. The menu page, cursor, equipment and ammo belong to that player; E-tanks and stage progress remain shared. Native base/form and weapon graphics packets keep different equipped weapons from sharing the wrong patterns.
+
+This is an initial local implementation. Partner HUD, complete weapon and adapter behavior, death/retry and stage transitions, all view modes, adaptive widescreen and online play remain unfinished. Online sessions are explicitly blocked while these development features are active.
+
+```text
+python tools/qa_route.py tests/routes/coop-controls.route --frames 4700 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-controls --extra=--coop --extra=on
+python tools/qa_route.py tests/routes/coop-traits.route --frames 4400 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-traits --extra=--coop --extra=on
+python tools/qa_route.py tests/routes/coop-weapons.route --frames 4850 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-weapons --extra=--coop --extra=on --extra=--weapon-cycle --extra=on
 ```

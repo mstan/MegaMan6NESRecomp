@@ -1,5 +1,6 @@
 /* Immutable character pixels replace only actor0's actual emitted OAM parts. */
 #include "mm6_proto.h"
+#include "mm6_coop.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
 #include "mod_function_hooks.h"
@@ -8,12 +9,13 @@
 #include <string.h>
 typedef struct {char magic[4];uint8_t valid,owner,owners[64];Mm6ProtoBody body;} ViewFrame;
 static ViewFrame s_build,s_frame;
-static int s_enabled;
+static int s_enabled,s_coop;
 static uint32_t s_bg[256*240];
 static uint8_t s_opaque[864*240],s_claimed[864*240],s_allowed[64][240];
 static int begin(uint16_t address) {
     (void)address;if(cyc_mod_isolated())return 0;
     memset(&s_build,0,sizeof s_build);memset(s_build.owners,255,sizeof s_build.owners);s_build.owner=255;
+    mm6_coop_build();
     if(mm6_proto_swapping()){mm6_proto_body(&s_build.body);s_build.valid=1;}
     return 0;
 }
@@ -28,7 +30,7 @@ static int part(uint16_t address) {
     CycModRegs r;cyc_mod_regs(&r);s_build.owners[((r.x+252)&255)/4]=s_build.owner;
     return 0;
 }
-static int dma(uint16_t address) {(void)address;if(!cyc_mod_isolated())s_frame=s_build;return 0;}
+static int dma(uint16_t address) {(void)address;if(!cyc_mod_isolated()){s_frame=s_build;mm6_coop_latch();}return 0;}
 static int animation(uint16_t address) {
     (void)address;if(cyc_mod_isolated())return 0;
     CycModRegs r;cyc_mod_regs(&r);if(!r.x)mm6_proto_animation(r.y);return 0;
@@ -57,6 +59,7 @@ static void body(uint32_t *out,int W,int origin,const Mm6ProtoBody *b) {
         if(!b->behind || !s_opaque[at])out[at]=color(index,b);
     }
 }
+void mm6_view_draw_character(uint32_t *out,int width,int origin,const Mm6ProtoBody *b){body(out,width,origin,b);}
 static void sprite(uint32_t *out,int W,int origin,int slot,const uint8_t *oam) {
     const uint8_t *o=oam+slot*4;
     int top=o[0]+1,height=cyc_render_line_sprite16(top<240?top:239)?16:8;
@@ -77,7 +80,8 @@ static void sprite(uint32_t *out,int W,int origin,int slot,const uint8_t *oam) {
 static int render(uint32_t *out,int W,int H,int native_x0,const uint32_t *native,void *ctx) {
     (void)ctx;(void)native_x0;(void)native;
     if(cyc_mod_peek(0x3a0)!=4 || (cyc_mod_peek(0x3b7)&2))return 0;
-    if(!s_enabled || !s_frame.valid || !s_frame.body.active || W<256 || W>864 || H!=240 || !cyc_render_background(s_bg))return 0;
+    int replace=s_enabled && s_frame.valid && s_frame.body.active;
+    if((!replace && !mm6_coop_has_frame()) || W<256 || W>864 || H!=240 || !cyc_render_background(s_bg))return 0;
     int origin=(W-256)/2;
     memset(s_opaque,0,sizeof s_opaque);memset(s_claimed,0,(size_t)W*H);
     for(int i=0;i<W*H;i++)out[i]=0xff000000u;
@@ -94,10 +98,11 @@ static int render(uint32_t *out,int W,int H,int native_x0,const uint32_t *native
         if(s_frame.owners[slot]==0 && slot<first)first=slot;
     }
     for(int slot=0;slot<64;slot++) {
-        if(s_frame.owners[slot]==0){if(slot==first)body(out,W,origin,&s_frame.body);}
+        if(replace && s_frame.owners[slot]==0){if(slot==first)body(out,W,origin,&s_frame.body);}
         else sprite(out,W,origin,slot,oam);
     }
     if(first==64 && mm6_proto_swapping())body(out,W,origin,&s_frame.body);
+    mm6_coop_draw(out,W,origin,s_opaque,s_claimed);
     cyc_render_set_native_origin(origin);return 1;
 }
 void mm6_view_power(void) {
@@ -105,19 +110,21 @@ void mm6_view_power(void) {
     memset(s_build.owners,255,sizeof s_build.owners);memset(s_frame.owners,255,sizeof s_frame.owners);
     s_build.owner=s_frame.owner=255;
 }
-void mm6_view_enable(int enabled) {
-    s_enabled=enabled!=0;
-    static const char *const ids[]={"begin","actor","part0","part1","part2","part3","dma","animation","animation-update"};
-    for(int i=0;i<sizeof ids/sizeof *ids;i++){char id[48];snprintf(id,sizeof id,"mm6.view.%s",ids[i]);nes_mod_set_function_hook_enabled(id,s_enabled);}
-    cyc_render_set_compositor(s_enabled?render:NULL,NULL);cyc_render_set_stock_compositing(s_enabled!=0);cyc_render_capture_background(s_enabled!=0);
+static void refresh(void) {
+    int active=s_enabled || s_coop;
+    static const char *const ids[]={"begin","frame","actor","part0","part1","part2","part3","dma","animation","animation-update"};
+    for(int i=0;i<sizeof ids/sizeof *ids;i++){char id[48];snprintf(id,sizeof id,"mm6.view.%s",ids[i]);nes_mod_set_function_hook_enabled(id,active);}
+    cyc_render_set_compositor(active?render:NULL,NULL);cyc_render_set_stock_compositing(active);cyc_render_capture_background(active);
 }
+void mm6_view_enable(int enabled){s_enabled=enabled!=0;refresh();}
+void mm6_view_coop(int enabled){s_coop=enabled!=0;refresh();}
 static int get(uint8_t *out,int cap) {
     if(cap<sizeof s_build+sizeof s_frame)return -1;
     memcpy(s_build.magic,"M6V1",4);memcpy(s_frame.magic,"M6V1",4);
     memcpy(out,&s_build,sizeof s_build);memcpy(out+sizeof s_build,&s_frame,sizeof s_frame);return sizeof s_build+sizeof s_frame;
 }
 static int valid(const uint8_t *in,int len) {
-    if(!len)return !s_enabled;if(!in || len!=sizeof s_build+sizeof s_frame)return 0;
+    if(!len)return !(s_enabled || s_coop);if(!in || len!=sizeof s_build+sizeof s_frame)return 0;
     ViewFrame p[2];memcpy(p,in,sizeof p);
     for(int i=0;i<2;i++) {
         if(memcmp(p[i].magic,"M6V1",4) || p[i].valid>1 || (p[i].owner>22 && p[i].owner!=255))return 0;
@@ -130,6 +137,7 @@ static int valid(const uint8_t *in,int len) {
 static int set(const uint8_t *in,int len) {if(!valid(in,len))return 0;if(len){memcpy(&s_build,in,sizeof s_build);memcpy(&s_frame,in+sizeof s_build,sizeof s_frame);}else mm6_view_power();return 1;}
 void mm6_view_register(void) {
     nes_mod_register_function_entry_plugin("mm6.view.begin",0xe1dd,begin);
+    nes_mod_register_function_entry_plugin("mm6.view.frame",0xd1d4,begin);
     nes_mod_register_function_entry_plugin("mm6.view.actor",0xe263,actor);
     nes_mod_register_function_entry_plugin("mm6.view.part0",0xe349,part);
     nes_mod_register_function_entry_plugin("mm6.view.part1",0xe387,part);

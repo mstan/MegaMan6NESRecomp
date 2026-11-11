@@ -70,6 +70,12 @@ length = 8
 crc32 = 0xB8CC757B
 
 [[mod_function_hook]]
+id = "mm6.view.frame"
+addr = 0xD1D4
+length = 8
+crc32 = 0x143D70F5
+
+[[mod_function_hook]]
 id = "mm6.view.actor"
 addr = 0xE263
 length = 8
@@ -116,3 +122,21 @@ id = "mm6.view.animation-update"
 addr = 0xE55D
 length = 8
 crc32 = 0x4CC86818
+
+[[mod_function_hook]]
+id = "mm6.coop.begin"
+addr = 0xE41C
+length = 8
+crc32 = 0xC3AB279B
+
+[[mod_function_hook]]
+id = "mm6.coop.actor-end"
+addr = 0xE47A
+length = 8
+crc32 = 0x9DA93220
+
+[[mod_function_hook]]
+id = "mm6.coop.animation-stop"
+addr = 0xE24B
+length = 8
+crc32 = 0x02204B18

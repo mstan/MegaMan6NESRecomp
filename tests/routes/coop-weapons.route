@@ -1,0 +1,40 @@
+# Acquisition precondition is set before the original first ground arrival.
+# Both native personal contexts then receive the same acquired inventory.
+INCLUDE proto-fixture.route
+2800 POKE 0689-0691 1B
+4050 X1:R
+4051 X1:-
+4060 X2:R
+4061 X2:-
+4070 X2:R
+4071 X2:-
+4080 SAVESTATE distinct_weapons
+4100 B
+4100 2:B
+4110 -
+4110 2:-
+4120 SAVESTATE distinct_shots
+4200 2:START
+4201 2:-
+4290 SAVESTATE guest_menu
+4300 DOWN
+4301 -
+4320 2:DOWN
+4321 2:-
+4340 2:DOWN
+4341 2:-
+4360 2:DOWN
+4361 2:-
+4390 2:START
+4400 2:-
+4499 SAVESTATE guest_menu_closed
+4550 START
+4551 -
+4640 SAVESTATE anchor_menu
+4670 DOWN
+4671 -
+4690 DOWN
+4691 -
+4720 START
+4730 -
+4849 SAVESTATE end

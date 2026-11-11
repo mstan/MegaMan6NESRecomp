@@ -29,9 +29,10 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_SOURCE_D
 include("${NESRECOMP_ROOT}/runner/cyc/project.cmake")
 nesrecomp_add_cycle_game(MegaMan6Recomp ROM "${NESRECOMP_ROM}"
     GAME_CONFIG "${CMAKE_SOURCE_DIR}/game.toml" SEED_FILE "${CMAKE_SOURCE_DIR}/cyc_seeds_usa.txt" GAME_ID "mega-man-6-usa"
-    PLAYERS 1 REGION NTSC MODS GAME_ID "mega-man-6-usa"
+    PLAYERS 2 REGION NTSC MODS GAME_ID "mega-man-6-usa"
     HOST_EXTRAS "${CMAKE_SOURCE_DIR}/src/mm6_host.c" "${CMAKE_SOURCE_DIR}/src/mm6_proto.c"
-        "${CMAKE_SOURCE_DIR}/src/mm6_view.c" "${NESRECOMP_ROOT}/runner/cyc/cyc_protoman_atlas.c")
+        "${CMAKE_SOURCE_DIR}/src/mm6_view.c" "${CMAKE_SOURCE_DIR}/src/mm6_coop.c"
+        "${NESRECOMP_ROOT}/runner/cyc/cyc_protoman_atlas.c")
 target_include_directories(MegaMan6Recomp PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_BINARY_DIR}" "${NESRECOMP_ROOT}/runner/src")
 add_custom_command(TARGET MegaMan6Recomp POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_SOURCE_DIR}/mods/preloaded" "$<TARGET_FILE_DIR:MegaMan6Recomp>/mods")

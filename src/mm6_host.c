@@ -1,5 +1,6 @@
 /* Native MM6 equipment, palette and CHR-RAM descriptors remain authoritative. */
 #include "mm6_proto.h"
+#include "mm6_coop.h"
 #include "cyc_host_extras.h"
 #include "cyc_input.h"
 #include "cyc_mod.h"
@@ -14,9 +15,11 @@
 #define R(a) cyc_mod_peek((uint16_t)(a))
 #define P(a,v) cyc_mod_poke((uint16_t)(a),(uint8_t)(v))
 typedef struct {char magic[4];uint8_t on,previous,pending,hurt;uint64_t changes;} Controls;
-static Controls S;
+static Controls s_players[2];
+#define S (s_players[mm6_coop_seat()])
 static int s_on;
 static int s_proto_on,s_proto_mode=1,s_proto_start=1;
+static int s_coop,s_roster;
 static uint8_t *s_cart;
 static size_t s_size;
 static FILE *s_log;
@@ -24,7 +27,7 @@ static unsigned prg(unsigned bank,unsigned address) {
     size_t at=(size_t)bank*8192+(address&8191);
     return at<s_size?s_cart[at]:255;
 }
-static int graphics(unsigned id,int commit) {
+static int graphics(unsigned id,int commit,uint8_t *decoded) {
     /* C95C: count in 16-byte units, destination in 16-byte units, a 9-bit
      * source offset in 16-byte units, and the physical source PRG bank. */
     unsigned descriptor=0x8000+4*id;
@@ -33,6 +36,10 @@ static int graphics(unsigned id,int commit) {
     dest|=(flags&128)<<5;
     size_t source=(size_t)((flags&126)>>1)*8192+(low|((flags&1)<<8))*16;
     if(!count || source+count>s_size || dest+count>8192)return 0;
+    if(decoded){
+        if(dest<0x1000 || dest+count>0x1800)return 0;
+        memcpy(decoded+dest-0x1000,s_cart+source,count);
+    }
     if(commit)for(unsigned i=0;i<count;i++)if(!cyc_mod_chr_poke((uint16_t)(dest+i),s_cart[source+i]))return 0;
     return 1;
 }
@@ -50,11 +57,29 @@ static int palette(unsigned id,uint8_t out[32]) {
     }
     return 0;
 }
-static int safe(void) {
+int mm6_controls_restore_graphics(void) {
+    /* Retail 95CC..95F5 reloads this same base/form and weapon packet.
+     * The two native personal pools share one physical CHR-RAM window. */
+    unsigned form=R(0x9B),weapon=R(0x699);
+    if(!s_cart || form>2 || weapon>9)return 0;
+    unsigned base=prg(0x38,0x96C7+form),extra=prg(0x3F,0xF708+weapon);
+    if(!graphics(base,0,NULL) || (weapon && !graphics(extra,0,NULL)))return 0;
+    return graphics(base,1,NULL) && (!weapon || graphics(extra,1,NULL));
+}
+int mm6_controls_read_graphics(uint8_t out[2048]) {
+    unsigned form=R(0x9B),weapon=R(0x699);
+    if(!s_cart || !out || form>2 || weapon>9)return 0;
+    unsigned base=prg(0x38,0x96C7+form),extra=prg(0x3F,0xF708+weapon);
+    return graphics(base,0,out) && (!weapon || graphics(extra,0,out));
+}
+static int safe_for(int seat) {
     /* Native Start is evaluated here only in the live player loop. The
      * frozen bit marks the retail menu; nonzero 9B is a Rush adapter form. */
-    return s_cart && R(0x3a0) && R(0x3e5)<28 && !S.hurt && !mm6_proto_swapping() && !R(0x9a) && !R(0x9b) && !(R(0x3b7)&2);
+    if(mm6_coop_enabled() && (!mm6_coop_ready() || (R(0x3B7)&2)))return 0;
+    return s_cart && mm6_coop_read(seat,0x3A0) && mm6_coop_read(seat,0x3E5)<28 && !s_players[seat].hurt &&
+        !mm6_proto_swapping() && !mm6_coop_read(seat,0x9A) && !mm6_coop_read(seat,0x9B) && !(mm6_coop_read(seat,0x3B7)&2);
 }
+static int safe(void){return safe_for(mm6_coop_seat());}
 int mm6_controls_hurt(void) {return S.hurt;}
 int mm6_controls_restore_palette(void) {
     uint8_t colors[32];for(int i=0;i<32;i++)colors[i]=R(0x360+i);
@@ -62,7 +87,7 @@ int mm6_controls_restore_palette(void) {
     for(int i=0;i<32;i++)P(0x360+i,colors[i]);P(0x46,R(0x46)+1);return 1;
 }
 static int hurt_begin(uint16_t address) {(void)address;S.hurt=1;S.pending=0;return 0;}
-static int hurt_end(uint16_t address) {(void)address;S.hurt=0;S.pending=0;return 0;}
+static int hurt_end(uint16_t address) {S.hurt=0;S.pending=0;if(address==0x802D)mm6_coop_arrival();return 0;}
 static int dispatch(uint16_t address) {
     (void)address;
     if(mm6_proto_dispatch()){S.pending=0;return 1;}
@@ -75,9 +100,9 @@ static int dispatch(uint16_t address) {
     unsigned base_graphics=prg(0x38,0x96c7),weapon_graphics=prg(0x3f,0xf708+next);
     unsigned base_palette=prg(0x38,0x96ca),weapon_palette=prg(0x38,0x962f+next);
     uint8_t colors[32];for(int i=0;i<32;i++)colors[i]=R(0x360+i);
-    if(!graphics(base_graphics,0) || (next && !graphics(weapon_graphics,0)) ||
+    if(!graphics(base_graphics,0,NULL) || (next && !graphics(weapon_graphics,0,NULL)) ||
         !palette(base_palette,colors) || (next && !palette(weapon_palette,colors)))return 0;
-    if(!graphics(base_graphics,1) || (next && !graphics(weapon_graphics,1)))return 0;
+    if(!graphics(base_graphics,1,NULL) || (next && !graphics(weapon_graphics,1,NULL)))return 0;
     /* Native 9617/9624: cancel the personal firing task and its actors. */
     P(0x699,next);P(0xa5,255);P(0x9e,0);P(0x22,0);
     for(int slot=1;slot<=7;slot++)P(0x3a0+slot,0);
@@ -86,22 +111,26 @@ static int dispatch(uint16_t address) {
     S.changes++;return 0;
 }
 void mm6_controls_refresh(void) {
-    int active=s_on || mm6_proto_enabled();
+    int active=s_on || mm6_proto_enabled() || mm6_coop_enabled();
     nes_mod_set_function_hook_enabled("mm6.player.inventory",active);
     nes_mod_set_function_hook_enabled("mm6.controls.hurt",active);
     nes_mod_set_function_hook_enabled("mm6.controls.hurt-end",active);
     nes_mod_set_function_hook_enabled("mm6.controls.arrival",active);
 }
-static void enabled(int on) {s_on=on!=0;S.previous=S.pending=0;mm6_controls_refresh();}
+static void enabled(int on) {s_on=on!=0;for(int i=0;i<2;i++)s_players[i].previous=s_players[i].pending=0;mm6_controls_refresh();}
 static void input(void *ctx,uint8_t buttons[2]) {
-    (void)ctx;(void)buttons;
-    unsigned held=nes_input_game_buttons(1)&(CYC_GAME_L|CYC_GAME_R),fresh=held&~S.previous;
-    if(!s_on || held==(CYC_GAME_L|CYC_GAME_R) || !safe())S.pending=0;
-    else if(fresh)S.pending=(uint8_t)fresh;
-    S.previous=(uint8_t)held;
+    (void)ctx;
+    for(int i=0;i<2;i++){
+        Controls *p=&s_players[i];
+        unsigned held=i && !mm6_coop_enabled()?0:nes_input_game_buttons(i+1)&(CYC_GAME_L|CYC_GAME_R),fresh=held&~p->previous;
+        if(!s_on || held==(CYC_GAME_L|CYC_GAME_R) || !safe_for(i))p->pending=0;
+        else if(fresh)p->pending=(uint8_t)fresh;
+        p->previous=(uint8_t)held;
+    }
+    mm6_coop_input(buttons);
 }
 static void power(void *ctx) {
-    (void)ctx;memset(&S,0,sizeof S);mm6_proto_power();free(s_cart);s_cart=NULL;
+    (void)ctx;memset(s_players,0,sizeof s_players);mm6_coop_power();mm6_proto_power();free(s_cart);s_cart=NULL;
     s_size=cyc_mod_copy_cart_payload(NULL,0);
     if(s_size==0x80000) {
         s_cart=malloc(s_size);
@@ -109,41 +138,55 @@ static void power(void *ctx) {
     }
 }
 static void end(void *ctx) {
-    (void)ctx;if(!safe())S.pending=0;mm6_proto_end();
-    char fields[512];mm6_proto_json(fields,sizeof fields);
-    if(s_log)fprintf(s_log,"{\"frame\":%u,\"weapon\":%u,\"form\":%u,\"terrain\":%u,\"pose_kind\":%u,\"hurt\":%u,\"hp\":%u,\"charge\":%u,\"held\":%u,\"changes\":%llu,%s}\n",
-        cyc_ring_frame,R(0x699),R(0x9b),R(0xa7),R(0x94),S.hurt,R(0x3e5),R(0x9e),S.previous,(unsigned long long)S.changes,fields);
+    (void)ctx;if(!safe())S.pending=0;mm6_proto_end();mm6_coop_end();
+    char fields[512],coop[512];mm6_proto_json(fields,sizeof fields);mm6_coop_json(coop,sizeof coop);
+    if(s_log)fprintf(s_log,"{\"frame\":%u,\"weapon\":%u,\"form\":%u,\"terrain\":%u,\"pose_kind\":%u,\"hurt\":%u,\"hp\":%u,\"charge\":%u,\"held\":%u,\"changes\":%llu,%s,%s}\n",
+        cyc_ring_frame,R(0x699),R(0x9b),R(0xa7),R(0x94),S.hurt,R(0x3e5),R(0x9e),S.previous,(unsigned long long)S.changes,fields,coop);
 }
 static bool option(void *ctx,const char *name,const char *value) {
     (void)ctx;
+    if(!strcmp(name,"--coop") || !strcmp(name,"--coop-roster")) {
+        if(!strcmp(name,"--coop")) {
+            if(strcmp(value,"on") && strcmp(value,"off"))return false;
+            s_coop=!strcmp(value,"on");
+        }else{
+            if(strcmp(value,"megaman-protoman") && strcmp(value,"protoman-megaman"))return false;
+            s_roster=!strcmp(value,"protoman-megaman");
+        }
+        if(!mm6_proto_set(s_proto_on || s_coop,s_proto_mode,s_proto_start))return false;
+        mm6_coop_set(s_coop,s_roster);mm6_controls_refresh();return true;
+    }
     if(!strcmp(name,"--mm6-controls-log")){if(s_log)fclose(s_log);s_log=fopen(value,"w");return s_log!=NULL;}
     if(!strcmp(name,"--protoman")) {
         if(strcmp(value,"on") && strcmp(value,"off"))return false;
-        s_proto_on=!strcmp(value,"on");return mm6_proto_set(s_proto_on,s_proto_mode,s_proto_start);
+        s_proto_on=!strcmp(value,"on");return mm6_proto_set(s_proto_on || s_coop,s_proto_mode,s_proto_start);
     }
     if(!strcmp(name,"--proto-mode") || !strcmp(name,"--proto-start")) {
         if(strcmp(value,"megaman") && strcmp(value,"protoman"))return false;
         if(!strcmp(name,"--proto-mode"))s_proto_mode=!strcmp(value,"protoman");else s_proto_start=!strcmp(value,"protoman");
-        return mm6_proto_set(s_proto_on,s_proto_mode,s_proto_start);
+        return mm6_proto_set(s_proto_on || s_coop,s_proto_mode,s_proto_start);
     }
     if(strcmp(name,"--weapon-cycle") || (strcmp(value,"on") && strcmp(value,"off")))return false;
     enabled(!strcmp(value,"on"));return true;
 }
 static int get(uint8_t *out,int capacity) {
-    if(capacity<sizeof S)return -1;
-    memcpy(S.magic,"M6W2",4);S.on=(uint8_t)s_on;memcpy(out,&S,sizeof S);return sizeof S;
+    if(capacity<sizeof s_players)return -1;
+    for(int i=0;i<2;i++){memcpy(s_players[i].magic,"M6W3",4);s_players[i].on=(uint8_t)s_on;}
+    memcpy(out,s_players,sizeof s_players);return sizeof s_players;
 }
 static int valid(const uint8_t *in,int len) {
     if(!len)return !s_on;
-    if(!in || len!=sizeof S)return 0;
-    Controls p;memcpy(&p,in,sizeof p);
-    return !memcmp(p.magic,"M6W2",4) && p.on==s_on && p.previous<=3 && p.pending<=3 && p.hurt<=1;
+    if(!in || len!=sizeof s_players)return 0;
+    Controls p[2];memcpy(p,in,sizeof p);
+    for(int i=0;i<2;i++)if(memcmp(p[i].magic,"M6W3",4) || p[i].on!=s_on || p[i].previous>3 || p[i].pending>3 || p[i].hurt>1)return 0;
+    return 1;
 }
-static int set(const uint8_t *in,int len) {if(!valid(in,len))return 0;if(len)memcpy(&S,in,sizeof S);else memset(&S,0,sizeof S);return 1;}
-static void reset(void){enabled(0);s_proto_on=0;mm6_proto_set(0,s_proto_mode,s_proto_start);}
+static int set(const uint8_t *in,int len) {if(!valid(in,len))return 0;if(len)memcpy(s_players,in,sizeof s_players);else memset(s_players,0,sizeof s_players);return 1;}
+static void reset(void){enabled(0);s_coop=0;mm6_coop_set(0,s_roster);s_proto_on=0;mm6_proto_set(0,s_proto_mode,s_proto_start);}
 static void activate(void){enabled(1);}
 NES_MOD_CONSTRUCTOR(register_mm6_controls) {
     mm6_proto_register();
+    mm6_coop_register();
     nes_mod_register_function_entry_plugin("mm6.player.inventory",0x924d,dispatch);
     nes_mod_register_function_entry_plugin("mm6.controls.hurt",0x84b0,hurt_begin);
     nes_mod_register_function_entry_plugin("mm6.controls.hurt-end",0x851a,hurt_end);
@@ -158,8 +201,10 @@ const CycHostExtras *cyc_host_extras(void) {
         {"--mm6-controls-log",true,"FILE: native equipment state for QA"},
         {"--protoman",true,"on|off: development solo character and swapping"},
         {"--proto-mode",true,"protoman|megaman: character traits or reskin"},
-        {"--proto-start",true,"protoman|megaman: starting character"}};
+        {"--proto-start",true,"protoman|megaman: starting character"},
+        {"--coop",true,"on|off: development native coroutine controls prototype"},
+        {"--coop-roster",true,"megaman-protoman|protoman-megaman: development roster"}};
     static const CycHostExtras extras={.power_on=power,.input=input,.frame_end=end,.option=option,
-        .options=options,.option_count=5,.input_profile=&profile};
+        .options=options,.option_count=7,.input_profile=&profile};
     return &extras;
 }
