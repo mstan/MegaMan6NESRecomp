@@ -1,4 +1,5 @@
 /* Native MM6 equipment, palette and CHR-RAM descriptors remain authoritative. */
+#include "mm6_proto.h"
 #include "cyc_host_extras.h"
 #include "cyc_input.h"
 #include "cyc_mod.h"
@@ -15,6 +16,7 @@
 typedef struct {char magic[4];uint8_t on,previous,pending,hurt;uint64_t changes;} Controls;
 static Controls S;
 static int s_on;
+static int s_proto_on,s_proto_mode=1,s_proto_start=1;
 static uint8_t *s_cart;
 static size_t s_size;
 static FILE *s_log;
@@ -51,12 +53,19 @@ static int palette(unsigned id,uint8_t out[32]) {
 static int safe(void) {
     /* Native Start is evaluated here only in the live player loop. The
      * frozen bit marks the retail menu; nonzero 9B is a Rush adapter form. */
-    return s_cart && R(0x3a0) && R(0x3e5)<28 && !S.hurt && !R(0x9a) && !R(0x9b) && !(R(0x3b7)&2);
+    return s_cart && R(0x3a0) && R(0x3e5)<28 && !S.hurt && !mm6_proto_swapping() && !R(0x9a) && !R(0x9b) && !(R(0x3b7)&2);
+}
+int mm6_controls_hurt(void) {return S.hurt;}
+int mm6_controls_restore_palette(void) {
+    uint8_t colors[32];for(int i=0;i<32;i++)colors[i]=R(0x360+i);
+    if(!palette(R(0xae),colors))return 0;
+    for(int i=0;i<32;i++)P(0x360+i,colors[i]);P(0x46,R(0x46)+1);return 1;
 }
 static int hurt_begin(uint16_t address) {(void)address;S.hurt=1;S.pending=0;return 0;}
 static int hurt_end(uint16_t address) {(void)address;S.hurt=0;S.pending=0;return 0;}
 static int dispatch(uint16_t address) {
     (void)address;
+    if(mm6_proto_dispatch()){S.pending=0;return 1;}
     unsigned fresh=S.pending;S.pending=0;
     if(!s_on || !safe() || (fresh!=CYC_GAME_L && fresh!=CYC_GAME_R))return 0;
     int current=R(0x699),next=current,step=fresh==CYC_GAME_L?-1:1;
@@ -76,13 +85,14 @@ static int dispatch(uint16_t address) {
     P(0xae,next?weapon_palette:base_palette);P(0x46,R(0x46)+1);
     S.changes++;return 0;
 }
-static void enabled(int on) {
-    s_on=on!=0;S.previous=S.pending=0;
-    nes_mod_set_function_hook_enabled("mm6.player.inventory",s_on);
-    nes_mod_set_function_hook_enabled("mm6.controls.hurt",s_on);
-    nes_mod_set_function_hook_enabled("mm6.controls.hurt-end",s_on);
-    nes_mod_set_function_hook_enabled("mm6.controls.arrival",s_on);
+void mm6_controls_refresh(void) {
+    int active=s_on || mm6_proto_enabled();
+    nes_mod_set_function_hook_enabled("mm6.player.inventory",active);
+    nes_mod_set_function_hook_enabled("mm6.controls.hurt",active);
+    nes_mod_set_function_hook_enabled("mm6.controls.hurt-end",active);
+    nes_mod_set_function_hook_enabled("mm6.controls.arrival",active);
 }
+static void enabled(int on) {s_on=on!=0;S.previous=S.pending=0;mm6_controls_refresh();}
 static void input(void *ctx,uint8_t buttons[2]) {
     (void)ctx;(void)buttons;
     unsigned held=nes_input_game_buttons(1)&(CYC_GAME_L|CYC_GAME_R),fresh=held&~S.previous;
@@ -91,7 +101,7 @@ static void input(void *ctx,uint8_t buttons[2]) {
     S.previous=(uint8_t)held;
 }
 static void power(void *ctx) {
-    (void)ctx;memset(&S,0,sizeof S);free(s_cart);s_cart=NULL;
+    (void)ctx;memset(&S,0,sizeof S);mm6_proto_power();free(s_cart);s_cart=NULL;
     s_size=cyc_mod_copy_cart_payload(NULL,0);
     if(s_size==0x80000) {
         s_cart=malloc(s_size);
@@ -99,13 +109,23 @@ static void power(void *ctx) {
     }
 }
 static void end(void *ctx) {
-    (void)ctx;if(!safe())S.pending=0;
-    if(s_log)fprintf(s_log,"{\"frame\":%u,\"weapon\":%u,\"form\":%u,\"state\":%u,\"hurt\":%u,\"hp\":%u,\"charge\":%u,\"held\":%u,\"changes\":%llu}\n",
-        cyc_ring_frame,R(0x699),R(0x9b),R(0xa7),S.hurt,R(0x3e5),R(0x9e),S.previous,(unsigned long long)S.changes);
+    (void)ctx;if(!safe())S.pending=0;mm6_proto_end();
+    char fields[512];mm6_proto_json(fields,sizeof fields);
+    if(s_log)fprintf(s_log,"{\"frame\":%u,\"weapon\":%u,\"form\":%u,\"terrain\":%u,\"pose_kind\":%u,\"hurt\":%u,\"hp\":%u,\"charge\":%u,\"held\":%u,\"changes\":%llu,%s}\n",
+        cyc_ring_frame,R(0x699),R(0x9b),R(0xa7),R(0x94),S.hurt,R(0x3e5),R(0x9e),S.previous,(unsigned long long)S.changes,fields);
 }
 static bool option(void *ctx,const char *name,const char *value) {
     (void)ctx;
     if(!strcmp(name,"--mm6-controls-log")){if(s_log)fclose(s_log);s_log=fopen(value,"w");return s_log!=NULL;}
+    if(!strcmp(name,"--protoman")) {
+        if(strcmp(value,"on") && strcmp(value,"off"))return false;
+        s_proto_on=!strcmp(value,"on");return mm6_proto_set(s_proto_on,s_proto_mode,s_proto_start);
+    }
+    if(!strcmp(name,"--proto-mode") || !strcmp(name,"--proto-start")) {
+        if(strcmp(value,"megaman") && strcmp(value,"protoman"))return false;
+        if(!strcmp(name,"--proto-mode"))s_proto_mode=!strcmp(value,"protoman");else s_proto_start=!strcmp(value,"protoman");
+        return mm6_proto_set(s_proto_on,s_proto_mode,s_proto_start);
+    }
     if(strcmp(name,"--weapon-cycle") || (strcmp(value,"on") && strcmp(value,"off")))return false;
     enabled(!strcmp(value,"on"));return true;
 }
@@ -120,9 +140,10 @@ static int valid(const uint8_t *in,int len) {
     return !memcmp(p.magic,"M6W2",4) && p.on==s_on && p.previous<=3 && p.pending<=3 && p.hurt<=1;
 }
 static int set(const uint8_t *in,int len) {if(!valid(in,len))return 0;if(len)memcpy(&S,in,sizeof S);else memset(&S,0,sizeof S);return 1;}
-static void reset(void){enabled(0);}
+static void reset(void){enabled(0);s_proto_on=0;mm6_proto_set(0,s_proto_mode,s_proto_start);}
 static void activate(void){enabled(1);}
 NES_MOD_CONSTRUCTOR(register_mm6_controls) {
+    mm6_proto_register();
     nes_mod_register_function_entry_plugin("mm6.player.inventory",0x924d,dispatch);
     nes_mod_register_function_entry_plugin("mm6.controls.hurt",0x84b0,hurt_begin);
     nes_mod_register_function_entry_plugin("mm6.controls.hurt-end",0x851a,hurt_end);
@@ -134,8 +155,11 @@ const CycHostExtras *cyc_host_extras(void) {
     static const CycInputProfile profile={.id="megaman-weapons-1",.game_label={"Previous weapon (L)","Next weapon (R)"},
         .game_pad={"leftshoulder","rightshoulder"},.shortcut_pad={"none","leftstick+rightstick",NULL,NULL,NULL,NULL,NULL}};
     static const CycHostOption options[]={{"--weapon-cycle",true,"on|off: cycle acquired weapons and Beat in normal form"},
-        {"--mm6-controls-log",true,"FILE: native equipment state for QA"}};
+        {"--mm6-controls-log",true,"FILE: native equipment state for QA"},
+        {"--protoman",true,"on|off: development solo character and swapping"},
+        {"--proto-mode",true,"protoman|megaman: character traits or reskin"},
+        {"--proto-start",true,"protoman|megaman: starting character"}};
     static const CycHostExtras extras={.power_on=power,.input=input,.frame_end=end,.option=option,
-        .options=options,.option_count=2,.input_profile=&profile};
+        .options=options,.option_count=5,.input_profile=&profile};
     return &extras;
 }

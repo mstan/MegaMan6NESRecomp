@@ -13,6 +13,13 @@ if(NOT EXISTS "${NESRECOMP_ROM}")
     message(FATAL_ERROR "Supply -DNESRECOMP_ROM with your Mega Man 6 (USA) ROM")
 endif()
 find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
+set(mm6_art "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded/packages/mega-man-6-usa.character.protoman/1.0.0/assets")
+file(READ "${mm6_art}/protoman.png" MM6_PROTO_PNG_BYTES HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1,\n" MM6_PROTO_PNG_BYTES "${MM6_PROTO_PNG_BYTES}")
+file(READ "${mm6_art}/jump-open.png" MM6_PROTO_JUMP_PNG_BYTES HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1,\n" MM6_PROTO_JUMP_PNG_BYTES "${MM6_PROTO_JUMP_PNG_BYTES}")
+configure_file(src/mm6_proto_sheet.h.in "${CMAKE_CURRENT_BINARY_DIR}/mm6_proto_sheet.h" @ONLY)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${mm6_art}/protoman.png" "${mm6_art}/jump-open.png")
 execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/rom_profile.py" "${NESRECOMP_ROM}"
     RESULT_VARIABLE profile_result OUTPUT_VARIABLE profile OUTPUT_STRIP_TRAILING_WHITESPACE)
 if(NOT profile_result EQUAL 0)
@@ -23,7 +30,8 @@ include("${NESRECOMP_ROOT}/runner/cyc/project.cmake")
 nesrecomp_add_cycle_game(MegaMan6Recomp ROM "${NESRECOMP_ROM}"
     GAME_CONFIG "${CMAKE_SOURCE_DIR}/game.toml" SEED_FILE "${CMAKE_SOURCE_DIR}/cyc_seeds_usa.txt" GAME_ID "mega-man-6-usa"
     PLAYERS 1 REGION NTSC MODS GAME_ID "mega-man-6-usa"
-    HOST_EXTRAS "${CMAKE_SOURCE_DIR}/src/mm6_host.c")
-target_include_directories(MegaMan6Recomp PRIVATE "${NESRECOMP_ROOT}/runner/src")
+    HOST_EXTRAS "${CMAKE_SOURCE_DIR}/src/mm6_host.c" "${CMAKE_SOURCE_DIR}/src/mm6_proto.c"
+        "${CMAKE_SOURCE_DIR}/src/mm6_view.c" "${NESRECOMP_ROOT}/runner/cyc/cyc_protoman_atlas.c")
+target_include_directories(MegaMan6Recomp PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_BINARY_DIR}" "${NESRECOMP_ROOT}/runner/src")
 add_custom_command(TARGET MegaMan6Recomp POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_SOURCE_DIR}/mods/preloaded" "$<TARGET_FILE_DIR:MegaMan6Recomp>/mods")

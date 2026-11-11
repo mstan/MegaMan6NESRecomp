@@ -1,0 +1,29 @@
+# Native movement and abilities; ordinary enemies are suppressed for this controls slice.
+300 START
+305 -
+600 START
+605 -
+900 A
+905 -
+1200 START
+1205 -
+1600 A
+1605 -
+2200 RIGHT+B
+2212 RIGHT+A+B
+2230 RIGHT
+2250 -
+2350 DOWN+A
+2351 DOWN
+2375 -
+2400 B
+2520 -
+2700 START
+2701 -
+2900 START
+2901 -
+3500 -
+3900 START
+3901 -
+4000 HOLD 03A8-03B6 00
+4000 SAVESTATE gameplay

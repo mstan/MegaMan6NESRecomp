@@ -26,3 +26,93 @@ id = "mm6.controls.arrival"
 addr = 0x802D
 length = 8
 crc32 = 0x2530005F
+
+[[mod_function_hook]]
+id = "mm6.proto.actor"
+addr = 0xE482
+length = 8
+crc32 = 0x36C53FAD
+
+[[mod_function_hook]]
+id = "mm6.proto.limit"
+addr = 0xE510
+length = 8
+crc32 = 0xCB66B9ED
+
+[[mod_function_hook]]
+id = "mm6.proto.created"
+addr = 0x81F0
+length = 8
+crc32 = 0x30EBB500
+
+[[mod_function_hook]]
+id = "mm6.proto.muzzle"
+addr = 0x8CA3
+length = 8
+crc32 = 0x61B1BA5B
+
+[[mod_function_hook]]
+id = "mm6.proto.damage"
+addr = 0x8F84
+length = 8
+crc32 = 0x323BBA9E
+
+[[mod_function_hook]]
+id = "mm6.proto.shield"
+addr = 0x8F72
+length = 8
+crc32 = 0x2F43C93C
+
+[[mod_function_hook]]
+id = "mm6.view.begin"
+addr = 0xE1DD
+length = 8
+crc32 = 0xB8CC757B
+
+[[mod_function_hook]]
+id = "mm6.view.actor"
+addr = 0xE263
+length = 8
+crc32 = 0x0DA9DCC4
+
+[[mod_function_hook]]
+id = "mm6.view.part0"
+addr = 0xE349
+length = 8
+crc32 = 0x8624B08A
+
+[[mod_function_hook]]
+id = "mm6.view.part1"
+addr = 0xE387
+length = 8
+crc32 = 0xB412D208
+
+[[mod_function_hook]]
+id = "mm6.view.part2"
+addr = 0xE3C6
+length = 8
+crc32 = 0x9F3F81CB
+
+[[mod_function_hook]]
+id = "mm6.view.part3"
+addr = 0xE40E
+length = 8
+crc32 = 0x9F3F81CB
+
+[[mod_function_hook]]
+id = "mm6.view.dma"
+addr = 0xC02E
+length = 8
+crc32 = 0x7B8E9CD9
+
+[[mod_function_hook]]
+id = "mm6.view.animation"
+addr = 0xE522
+length = 8
+crc32 = 0xAA2E7E61
+
+[[mod_function_hook]]
+id = "mm6.view.animation-update"
+addr = 0xE55D
+length = 8
+crc32 = 0x4CC86818
