@@ -32,6 +32,7 @@ typedef struct {
 } Coop;
 static Coop C;
 static int s_on,s_roster,s_count,s_animating,s_view;
+static uint8_t personal_camera_read(uint16_t pc,uint16_t address,uint8_t value);
 static uint16_t s_addr[PERSONAL_CAP],s_index[2048];
 int mm6_coop_enabled(void){return s_on;}
 int mm6_coop_ready(void){return s_on && C.initialized;}
@@ -44,6 +45,7 @@ int mm6_coop_scene_locked(void){return C.scene || R(0x47) || R(0x58) || R(0x59) 
 void mm6_coop_view_set(int mode){
     if(mode<0 || mode>3)return;
     s_view=mode;mm6_view_coop(s_on);mm6_wide_views_changed();
+    cyc_mod_set_ram_read_hook(s_on && s_view?personal_camera_read:NULL);
     cyc_video_override_width(mm6_coop_independent()?(s_view==1?512:256):0);
 }
 int mm6_coop_view_rects(int left[2]){
@@ -176,6 +178,23 @@ static int personal_camera(uint16_t address){
      * scene leader; a second controller otherwise scrolls it a second time
      * and changes the native director's destination-page calculation. */
     return s_on && C.initialized && C.owner!=C.anchor && !cyc_mod_isolated();
+}
+static uint8_t personal_camera_read(uint16_t pc,uint16_t address,uint8_t value){
+    if((address!=0x56 && address!=0x57) || !s_on || !s_view || !C.initialized ||
+        !C.guest_round || C.scene || (R(0x3B7)&2) || R(0x8F)>7 || R(0x58) || R(0x59) || R(0x642) || cyc_mod_isolated())return value;
+    /* These are the original personal viewport bounds, helper constructors
+     * and friendly-actor cull reads. Never project a camera into shared RAM:
+     * the native NMI, renderer, director and pending wait keep the real source.
+     * Both CPU backends use this same operand boundary and original clocks. */
+    int personal=pc==0xE495 || pc==0xE49B;
+    if(R(0x4A)==0x38)switch(pc){
+        case 0x8F2E:case 0x8F3E:case 0x9C94:case 0x9EBB:case 0x9EC0:
+        case 0x9FA1:case 0x9FA6:case 0x9FD7:case 0x9FDC:personal=1;break;
+    }
+    int lo,hi;if(!personal || !mm6_world_bounds(&lo,&hi))return value;
+    int left=((R(0x46F)<<8)|R(0x486))-128;
+    if(left<lo)left=lo;if(left>hi-256)left=hi-256;
+    return (uint8_t)(address==0x56?left:left>>8);
 }
 static int shot_hit(uint16_t address){
     (void)address;
@@ -391,6 +410,7 @@ void mm6_coop_draw(uint32_t *out,int width,int origin,const uint8_t *opaque,uint
 void mm6_coop_power(void){memset(&C,0,sizeof C);addresses();mm6_charge_power();}
 void mm6_coop_set(int enabled,int roster){
     s_on=enabled!=0;s_roster=roster!=0;C.initialized=C.eligible=C.owner=C.anchor=C.guest_round=C.scene=C.inventory_pending=0;
+    cyc_mod_set_ram_read_hook(s_on && s_view?personal_camera_read:NULL);
     mm6_charge_set(s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.begin",s_on);nes_mod_set_function_hook_enabled("mm6.coop.actor-end",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.animation-stop",s_on);mm6_view_coop(s_on);
