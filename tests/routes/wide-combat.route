@@ -1,0 +1,48 @@
+# Native input through stage entry; hold only placement and invulnerability.
+# Authored enemies, their health, shots, damage and deaths remain native.
+300 START
+305 -
+600 START
+605 -
+900 A
+905 -
+1200 START
+1205 -
+1600 A
+1605 -
+2200 RIGHT+B
+2212 RIGHT+A+B
+2230 RIGHT
+2250 -
+2350 DOWN+A
+2351 DOWN
+2375 -
+2400 B
+2520 -
+2700 START
+2701 -
+2900 START
+2901 -
+3500 -
+3900 START
+3901 -
+4000 HOLD 00A2 FF
+4000 HOLD 0486 E0
+4000 HOLD 046F 00
+4000 HOLD 04CB 94
+4000 HOLD 04B4 00
+4010 RIGHT
+4011 -
+4099 SAVESTATE authored_margin_actors
+4100 B
+4200 -
+4320 B
+4420 -
+4540 B
+4640 -
+4680 SAVESTATE first_margin_killed
+4760 B
+4860 -
+4980 B
+5080 -
+5140 SAVESTATE second_margin_killed

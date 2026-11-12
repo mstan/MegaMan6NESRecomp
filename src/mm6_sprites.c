@@ -1,5 +1,6 @@
 /* Immutable full native sprite packets, independent of physical OAM capacity. */
 #include "mm6_sprites.h"
+#include "mm6_wide.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
 #include "mod_savestate.h"
@@ -7,10 +8,10 @@
 #define R(a) cyc_mod_peek((uint16_t)(a))
 #define P(a,v) cyc_mod_poke((uint16_t)(a),(uint8_t)(v))
 enum { PART_CAP=4096 };
-typedef struct {uint8_t x,y,owner,attr,colors[4],pixels[64];} Part;
-typedef struct {char magic[4];uint16_t count;uint8_t valid;Part parts[PART_CAP];} Frame;
+typedef struct {int16_t x;uint8_t y,owner,attr,colors[4],pixels[64];} Part;
+typedef struct {char magic[4];uint16_t count;uint8_t valid,world;uint16_t camera;Part parts[PART_CAP];} Frame;
 static Frame B,F;
-static int s_active,s_capture,s_owner,s_failed,s_body;
+static int s_active,s_capture,s_owner,s_failed,s_body,s_world_x;
 void mm6_sprites_power(void){memset(&B,0,sizeof B);memset(&F,0,sizeof F);s_capture=0;}
 void mm6_sprites_active(int active){s_active=active!=0;}
 void mm6_sprites_part(void){
@@ -19,7 +20,7 @@ void mm6_sprites_part(void){
     if(top<240){
         if(B.count==PART_CAP)s_failed=1;
         else{
-            Part *p=&B.parts[B.count++];p->x=R(0x203+offset);p->y=(uint8_t)top;p->owner=(uint8_t)s_owner;p->attr=R(0x202+offset);
+            Part *p=&B.parts[B.count++];p->x=(int16_t)(R(0x203+offset)+(B.world?s_world_x-128:0));p->y=(uint8_t)top;p->owner=(uint8_t)s_owner;p->attr=R(0x202+offset);
             for(int i=0;i<4;i++)p->colors[i]=R(0x370+(p->attr&3)*4+i)&63;
             int tile=R(0x201+offset),table=cyc_render_line_sprite_table(top);
             for(int y=0;y<8;y++){
@@ -37,12 +38,15 @@ void mm6_sprites_part(void){
 int mm6_sprites_capture(void){
     memset(&B,0,sizeof B);
     if(!s_active || cyc_mod_isolated() || R(0x3A0)!=4 || (R(0x3B7)&2))return 0;
+    B.world=(uint8_t)mm6_wide_active();B.camera=(uint16_t)((R(0x57)<<8)|R(0x56));
     if(!cyc_mod_isolate_begin())return 0;
     s_capture=1;s_failed=s_body=0;cyc_mod_allow_isolated_hooks(true);int ok=1;
     for(int order=22;order>=0 && ok && !s_failed;order--){
         int slot=R(0x7D9+order);if(slot>22){s_failed=1;break;}
         if(!R(0x3A0+slot) || (R(0x3B7+slot)&3) || R(0x4B4+slot))continue;
-        int relative=(R(0x486+slot)-R(0xF7))&255;if(relative<4)continue;
+        s_world_x=(R(0x46F+slot)<<8)|R(0x486+slot);
+        int relative=B.world?128:(R(0x486+slot)-R(0xF7))&255;if(relative<4)continue;
+        if(B.world)P(0xF7,s_world_x-128);
         CycModRegs r;cyc_mod_regs(&r);r.y=R(0x458+slot);ok=cyc_mod_call(0xCBC0,&r);
         for(int i=0;i<256;i+=4)P(0x200+i,240);
         P(0x8C,0);P(0x00,relative);r.x=(uint8_t)slot;s_owner=slot;
@@ -53,13 +57,19 @@ int mm6_sprites_capture(void){
 }
 void mm6_sprites_latch(void){F=B;}
 int mm6_sprites_ready(void){return s_active && F.valid;}
-void mm6_sprites_draw(uint32_t *out,int width,int origin,const Mm6ProtoBody *body,int replace,const uint8_t *opaque,uint8_t *claimed){
-    if(!mm6_sprites_ready())return;int drawn=0;
+void mm6_sprites_draw(uint32_t *out,int width,int origin,const Mm6ProtoBody *body,int replace,const uint8_t *opaque,uint8_t *claimed,int limited,const uint8_t *hud_lines,int hud_parts){
+    if(!mm6_sprites_ready())return;int drawn=0,emitted=hud_parts;uint16_t lines[240]={0};
+    if(hud_lines)for(int y=0;y<240;y++)lines[y]=hud_lines[y];
     for(int i=0;i<F.count;i++){
         const Part *p=&F.parts[i];
+        int left=origin+p->x-(F.world?F.camera:0);if(left>=width || left+8<=0)continue;
+        if(limited && emitted++>=64)break;
+        uint8_t allowed[8]={0};int visible=0;
+        for(int y=0;y<8 && p->y+y<240;y++){allowed[y]=(uint8_t)(!limited || lines[p->y+y]++<8);visible|=allowed[y];}
+        if(!visible)continue;
         if(replace && !p->owner){if(!drawn){mm6_view_draw_character(out,width,origin,body);drawn=1;}continue;}
         for(int y=0;y<8;y++)for(int x=0;x<8;x++){
-            int v=p->pixels[y*8+x],px=origin+p->x+x,py=p->y+y;
+            int v=p->pixels[y*8+x],px=left+x,py=p->y+y;if(!allowed[y])continue;
             if(!v || px<0 || px>=width || py>=240 || !(cyc_render_line_mask(py)&16) || (px<8 && !(cyc_render_line_mask(py)&4)))continue;
             int at=py*width+px;if(claimed[at])continue;claimed[at]=1;
             if(!(p->attr&32) || !opaque[at]){int c=(int)p->colors[v]-(int)R(0x48);out[at]=cyc_render_color_value(c<0?15:c&63);}
@@ -67,14 +77,14 @@ void mm6_sprites_draw(uint32_t *out,int width,int origin,const Mm6ProtoBody *bod
     }
 }
 static int get(uint8_t *out,int cap){
-    if(cap<sizeof B+sizeof F)return -1;memcpy(B.magic,"M6S1",4);memcpy(F.magic,"M6S1",4);
+    if(cap<sizeof B+sizeof F)return -1;memcpy(B.magic,"M6S2",4);memcpy(F.magic,"M6S2",4);
     memcpy(out,&B,sizeof B);memcpy(out+sizeof B,&F,sizeof F);return sizeof B+sizeof F;
 }
 static int valid(const uint8_t *in,int len){
     if(!len)return !s_active;if(!in || len!=sizeof B+sizeof F)return 0;
     static Frame frames[2];memcpy(frames,in,sizeof frames);
     for(int i=0;i<2;i++){
-        const Frame *f=&frames[i];if(memcmp(f->magic,"M6S1",4) || f->count>PART_CAP || f->valid>1)return 0;
+        const Frame *f=&frames[i];if(memcmp(f->magic,"M6S2",4) || f->count>PART_CAP || f->valid>1 || f->world>1)return 0;
         for(int j=0;j<f->count;j++){const Part *p=&f->parts[j];if(p->owner>22 || p->y>=240)return 0;for(int k=0;k<4;k++)if(p->colors[k]>63)return 0;for(int k=0;k<64;k++)if(p->pixels[k]>3)return 0;}
     }
     return 1;

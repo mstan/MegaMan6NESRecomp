@@ -1,6 +1,7 @@
 /* Native MM6 equipment, palette and CHR-RAM descriptors remain authoritative. */
 #include "mm6_proto.h"
 #include "mm6_world.h"
+#include "mm6_wide.h"
 #include "mm6_coop.h"
 #include "mm6_charge.h"
 #include "cyc_host_extras.h"
@@ -141,7 +142,7 @@ static void input(void *ctx,uint8_t buttons[2]) {
     mm6_coop_input(buttons);
 }
 static void power(void *ctx) {
-    (void)ctx;memset(s_players,0,sizeof s_players);mm6_coop_power();mm6_proto_power();free(s_cart);s_cart=NULL;
+    (void)ctx;memset(s_players,0,sizeof s_players);mm6_coop_power();mm6_proto_power();mm6_wide_power();free(s_cart);s_cart=NULL;
     s_size=cyc_mod_copy_cart_payload(NULL,0);
     if(s_size==0x80000) {
         s_cart=malloc(s_size);
@@ -150,9 +151,9 @@ static void power(void *ctx) {
 }
 static void end(void *ctx) {
     (void)ctx;if(!safe())S.pending=0;mm6_proto_end();mm6_coop_end();mm6_charge_end();
-    char fields[512],coop[512];mm6_proto_json(fields,sizeof fields);mm6_coop_json(coop,sizeof coop);
-    if(s_log)fprintf(s_log,"{\"frame\":%u,\"weapon\":%u,\"form\":%u,\"terrain\":%u,\"pose_kind\":%u,\"hurt\":%u,\"hp\":%u,\"charge\":%u,\"held\":%u,\"changes\":%llu,%s,%s}\n",
-        cyc_ring_frame,R(0x699),R(0x9b),R(0xa7),R(0x94),S.hurt,R(0x3e5),R(0x9e),S.previous,(unsigned long long)S.changes,fields,coop);
+    char fields[512],coop[512],wide[256];mm6_proto_json(fields,sizeof fields);mm6_coop_json(coop,sizeof coop);mm6_wide_json(wide,sizeof wide);
+    if(s_log)fprintf(s_log,"{\"frame\":%u,\"weapon\":%u,\"form\":%u,\"terrain\":%u,\"pose_kind\":%u,\"hurt\":%u,\"hp\":%u,\"charge\":%u,\"held\":%u,\"changes\":%llu,%s,%s,%s}\n",
+        cyc_ring_frame,R(0x699),R(0x9b),R(0xa7),R(0x94),S.hurt,R(0x3e5),R(0x9e),S.previous,(unsigned long long)S.changes,fields,coop,wide);
 }
 static bool option(void *ctx,const char *name,const char *value) {
     (void)ctx;
@@ -212,6 +213,7 @@ static void no_flicker(void){mm6_view_no_flicker(1);}
 NES_MOD_CONSTRUCTOR(register_mm6_controls) {
     mm6_proto_register();
     mm6_coop_register();
+    mm6_wide_register();
     nes_mod_register_function_entry_plugin("mm6.player.inventory",0x924d,dispatch);
     nes_mod_register_function_entry_plugin("mm6.controls.hurt",0x84b0,hurt_begin);
     nes_mod_register_function_entry_plugin("mm6.controls.hurt-end",0x851a,hurt_end);

@@ -9,6 +9,14 @@
 static FILE *s_audit;
 static int s_reported;
 static int stage_byte(int address){return mm6_controls_prg(address<0xA000?0x3A:0x3B,address);}
+int mm6_world_actor(int index,Mm6WorldActor *out){
+    int pages=R(0x74)|(R(0x75)<<8),xs=R(0x78)|(R(0x79)<<8);
+    int ys=R(0x7C)|(R(0x7D)<<8),types=R(0x7E)|(R(0x7F)<<8),count=xs-pages;
+    if(!out || pages<0x8000 || types+count>0xC000 || count<1 || count>128 || ys-xs!=count || types-ys!=count || index<0 || index>=count)return 0;
+    int page=stage_byte(pages+index);if(page>=128)return 0;
+    out->kind=(uint8_t)stage_byte(types+index);out->y=(uint8_t)stage_byte(ys+index);
+    out->x=(uint16_t)(page*256+stage_byte(xs+index));return 1;
+}
 int mm6_world_bounds(int *left,int *right){
     if(!left || !right || R(0x51)>=16 || R(0x58) || R(0x59))return 0;
     int pages=R(0x74)|(R(0x75)<<8),xs=R(0x78)|(R(0x79)<<8);
@@ -32,6 +40,13 @@ int mm6_world_bounds(int *left,int *right){
     }
     return 0;
 }
+int mm6_world_geometry(int width,int *camera,int *left,int *lo,int *hi){
+    if(!camera || !left || width<256 || width>864 || R(0x60) || !mm6_world_bounds(lo,hi))return 0;
+    *camera=(R(0x57)<<8)|R(0x56);*left=*camera-(width-256)/2;
+    if(*hi-*lo<width)*left=*lo-(width-(*hi-*lo))/2;
+    else{if(*left<*lo)*left=*lo;if(*left+width>*hi)*left=*hi-width;}
+    return 1;
+}
 int mm6_world_tile(int x,int y,Mm6WorldTile *out){
     int stage=R(0x51),art=R(0x6E),map=R(0x6F),base=R(0x52)|(R(0x53)<<8);
     if(!out || stage>=16 || art>=64 || map>=64 || x<0 || x>=8192 || y<0 || y>255 || base<0xA000 || base+0x7FF>=0xC000)return 0;
@@ -48,10 +63,7 @@ int mm6_world_tile(int x,int y,Mm6WorldTile *out){
     out->palette=(uint8_t)(flags&3);out->metatile=(uint8_t)meta;out->flags=(uint8_t)flags;return 1;
 }
 int mm6_world_background(uint32_t *out,int width,const uint32_t *native,uint8_t *opaque,int *origin){
-    int lo,hi;if(!out || !native || !opaque || !origin || width<=256 || !mm6_world_bounds(&lo,&hi))return 0;
-    int camera=(R(0x57)<<8)|R(0x56),left=camera-(width-256)/2;
-    if(hi-lo<width)left=lo-(width-(hi-lo))/2;
-    else{if(left<lo)left=lo;if(left+width>hi)left=hi-width;}
+    int lo,hi,camera,left;if(!out || !native || !opaque || !origin || width<=256 || !mm6_world_geometry(width,&camera,&left,&lo,&hi))return 0;
     *origin=camera-left;const uint8_t *native_opaque=cyc_frame_bg_opaque();
     for(int y=0;y<240;y++){
         int delta=(cyc_render_line_scroll_x(y)-(camera&511)+256)&511,actual=camera+delta-256;

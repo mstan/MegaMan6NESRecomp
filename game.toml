@@ -182,3 +182,33 @@ id = "mm6.view.complete-full"
 addr = 0xE283
 length = 8
 crc32 = 0x5B8B7308
+
+[[mod_function_hook]]
+id = "mm6.wide.spawn"
+addr = 0x8120
+length = 8
+crc32 = 0xA9E0F2DC
+
+[[mod_function_hook]]
+id = "mm6.wide.cull"
+addr = 0xE4A5
+length = 8
+crc32 = 0xDD033AFB
+
+[[mod_function_hook]]
+id = "mm6.wide.emitter"
+addr = 0xE2A9
+length = 8
+crc32 = 0x864CC3F2
+
+[[mod_function_hook]]
+id = "mm6.wide.authored"
+addr = 0x81A7
+length = 8
+crc32 = 0x540617F2
+
+[[mod_function_hook]]
+id = "mm6.wide.reset"
+addr = 0x8032
+length = 8
+crc32 = 0xD2CCBEBB

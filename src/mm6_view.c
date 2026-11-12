@@ -3,6 +3,7 @@
 #include "mm6_coop.h"
 #include "mm6_sprites.h"
 #include "mm6_world.h"
+#include "mm6_wide.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
 #include "cyc_video.h"
@@ -112,9 +113,14 @@ static int render(uint32_t *out,int W,int H,int native_x0,const uint32_t *native
         for(int y=top;y<top+height && y<240;y++)s_allowed[slot][y]=counts[y]++<8;
         if(s_frame.owners[slot]==0 && slot<first)first=slot;
     }
-    if(s_no_flicker && mm6_sprites_ready()){
-        for(int slot=0;slot<64;slot++)if(s_frame.owners[slot]==255)sprite(out,W,origin,slot,oam);
-        mm6_sprites_draw(out,W,origin,&s_frame.body,replace,s_opaque,s_claimed);
+    if((s_no_flicker || s_wide) && mm6_sprites_ready()){
+        uint8_t hud_lines[240]={0};int hud_parts=0;
+        for(int slot=0;slot<64;slot++)if(s_frame.owners[slot]==255){
+            sprite(out,W,origin,slot,oam);
+            int top=oam[slot*4]+1,height=cyc_render_line_sprite16(top<240?top:239)?16:8;
+            if(top<240){hud_parts++;for(int y=top;y<top+height && y<240;y++)hud_lines[y]++;}
+        }
+        mm6_sprites_draw(out,W,origin,&s_frame.body,replace,s_opaque,s_claimed,!s_no_flicker,hud_lines,hud_parts);
     }else for(int slot=0;slot<64;slot++) {
         if(replace && s_frame.owners[slot]==0){if(slot==first)body(out,W,origin,&s_frame.body);}
         else sprite(out,W,origin,slot,oam);
@@ -140,6 +146,7 @@ void mm6_view_coop(int enabled){s_coop=enabled!=0;refresh();}
 void mm6_view_no_flicker(int enabled){s_no_flicker=enabled!=0;refresh();}
 void mm6_view_wide(int enabled,const char *aspect){
     s_wide=enabled!=0;int mode=NES_VIDEO_FIT;
+    mm6_wide_set(s_wide);
     if(aspect && !strcmp(aspect,"stock"))mode=NES_VIDEO_STOCK;
     else if(aspect && !strcmp(aspect,"16-9"))mode=NES_VIDEO_16_9;
     else if(aspect && !strcmp(aspect,"21-9"))mode=NES_VIDEO_21_9;
