@@ -218,3 +218,141 @@ id = "mm6.view.hud"
 addr = 0xD1F2
 length = 8
 crc32 = 0xA6468233
+
+[[mod_function_hook]]
+id = "mm6.coop.room-door"
+addr = 0xD441
+length = 8
+crc32 = 0x094E942F
+
+[[mod_function_hook]]
+id = "mm6.coop.room-right"
+addr = 0xD64F
+length = 8
+crc32 = 0xBE51AF65
+
+[[mod_function_hook]]
+id = "mm6.coop.room-left"
+addr = 0xD6AF
+length = 8
+crc32 = 0xBF14C6FD
+
+[[mod_function_hook]]
+id = "mm6.coop.room-down-left"
+addr = 0xD53C
+length = 8
+crc32 = 0x64A8DF68
+
+[[mod_function_hook]]
+id = "mm6.coop.room-down-right"
+addr = 0xD583
+length = 8
+crc32 = 0x4F858CAB
+
+[[mod_function_hook]]
+id = "mm6.coop.room-up-left"
+addr = 0xD5CD
+length = 8
+crc32 = 0x4809B6DE
+
+[[mod_function_hook]]
+id = "mm6.coop.room-up-right"
+addr = 0xD60E
+length = 8
+crc32 = 0x4809B6DE
+
+[[mod_function_hook]]
+id = "mm6.coop.room-end-right"
+addr = 0xD75A
+length = 8
+crc32 = 0x91EA3217
+
+[[mod_function_hook]]
+id = "mm6.coop.room-end-left"
+addr = 0xD7AE
+length = 8
+crc32 = 0x25188271
+
+[[mod_function_hook]]
+id = "mm6.coop.room-end-down-right"
+addr = 0xD7EB
+length = 8
+crc32 = 0x10AE09ED
+
+[[mod_function_hook]]
+id = "mm6.coop.room-end-down-left"
+addr = 0xD828
+length = 8
+crc32 = 0x7644C451
+
+[[mod_function_hook]]
+id = "mm6.coop.room-end-up-right"
+addr = 0xD86D
+length = 8
+crc32 = 0xA7BE325E
+
+[[mod_function_hook]]
+id = "mm6.coop.room-end-up-left"
+addr = 0xD8AA
+length = 8
+crc32 = 0x3833E6F3
+
+[[mod_function_hook]]
+id = "mm6.coop.hit-normal"
+addr = 0x9024
+length = 8
+crc32 = 0x43A00D13
+
+[[mod_function_hook]]
+id = "mm6.coop.hit-piercing"
+addr = 0x906A
+length = 8
+crc32 = 0x81FB69A6
+
+[[mod_function_hook]]
+id = "mm6.coop.hit-clear"
+addr = 0x9093
+length = 8
+crc32 = 0x3B7A0970
+
+[[mod_function_hook]]
+id = "mm6.coop.hit-reflected"
+addr = 0x90E1
+length = 8
+crc32 = 0xA10E2ED2
+
+[[mod_function_hook]]
+id = "mm6.coop.boss-lethal"
+addr = 0xEFAB
+length = 8
+crc32 = 0x56813459
+
+[[mod_function_hook]]
+id = "mm6.coop.global-scene"
+addr = 0xCD67
+length = 8
+crc32 = 0xDD644BF5
+
+[[mod_function_hook]]
+id = "mm6.coop.robot-lethal"
+addr = 0x9A18
+length = 8
+crc32 = 0xF0F3BA8B
+
+[[mod_function_hook]]
+id = "mm6.coop.robot-jet-lethal"
+addr = 0x9AFA
+length = 8
+crc32 = 0xF0F3BA8B
+
+[[mod_function_hook]]
+id = "mm6.coop.stage-begin"
+addr = 0xCDC3
+length = 8
+crc32 = 0xD9B03B3C
+
+[[mod_function_hook]]
+id = "mm6.coop.personal-camera"
+addr = 0x8C39
+length = 8
+crc32 = 0x63A727A9
