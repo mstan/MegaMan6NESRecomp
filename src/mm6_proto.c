@@ -29,6 +29,9 @@ int mm6_proto_selected(void) {int character=mm6_coop_character();return s_on && 
 int mm6_proto_swapping(void) {return s_on && !mm6_coop_enabled() && S.teleport;}
 const CycProtoAtlas *mm6_proto_atlas(void) {return s_loaded?&s_atlas:NULL;}
 void mm6_proto_animation(int animation) {S.native_animation=(uint8_t)animation;}
+void mm6_proto_clone_animation(int from,int to) {
+    if(from>=0 && from<2 && to>=0 && to<2)s_players[to].native_animation=s_players[from].native_animation;
+}
 static int safe(void) {
     return R(0x3a0)==4 && R(0x3e5)<28 && !mm6_controls_hurt() &&
         !(R(0x3b7)&2) && R(0x94)!=3 && !R(0x47) && !R(0x60);

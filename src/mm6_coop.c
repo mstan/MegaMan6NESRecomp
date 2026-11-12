@@ -18,6 +18,7 @@ typedef struct {
     char magic[4];uint8_t enabled,roster,initialized,eligible,owner,anchor,guest_round;
     uint8_t raw[2],previous[2],pending[2];
     Player player[2];uint64_t world,updates[2];
+    uint8_t dead[2],retry,retry_ammo[2][10];
     Picture build,frame;
 } Coop;
 static Coop C;
@@ -32,7 +33,7 @@ static void addresses(void){
     /* Native Buster1..3, Beat4, hurt effect5 and friendly ricochets6/7.
      * Level actors8..21 and the director22 remain in the shared loop. */
     for(int base=0x3A0;base<=0x63B;base+=23)for(int slot=0;slot<8;slot++)s_addr[s_count++]=(uint16_t)(base+slot);
-    for(int a=0x94;a<=0xAE;a++)s_addr[s_count++]=(uint16_t)a;
+    for(int a=0x94;a<=0xAE;a++)if(a!=0xA9)s_addr[s_count++]=(uint16_t)a;
     s_addr[s_count++]=0x22;
     for(int a=0x688;a<=0x691;a++)s_addr[s_count++]=(uint16_t)a;
     s_addr[s_count++]=0x699;
@@ -63,10 +64,16 @@ static void input_for(int seat){
 static void initialize(void){
     C.owner=C.anchor=C.guest_round=0;C.initialized=1;
     capture(&C.player[0]);C.player[1]=C.player[0];
+    mm6_proto_clone_animation(0,1);
     int x=((R(0x46F)<<8)|R(0x486))-16;if(x<16)x=16;
     put(&C.player[1],0x486,x);put(&C.player[1],0x46F,x>>8);
     for(int slot=1;slot<8;slot++)put(&C.player[1],0x3A0+slot,0);
     put(&C.player[1],0x9E,0);put(&C.player[1],0xA5,255);put(&C.player[1],0x22,0);
+    if(C.retry==2){
+        for(int seat=0;seat<2;seat++)for(int i=0;i<10;i++)put(&C.player[seat],0x688+i,C.retry_ammo[seat][i]);
+        project(&C.player[0]);
+    }
+    C.dead[0]=C.dead[1]=C.retry=0;
 }
 static int begin(uint16_t address){
     (void)address;if(!s_on || cyc_mod_isolated())return 0;
@@ -84,6 +91,9 @@ static int actor_end(uint16_t address){
          * E477 has already restored the original native stack base. */
         P(0x8F,8);
     }else{
+        if(C.dead[C.anchor] && !C.dead[C.anchor^1]){
+            C.anchor^=1;P(0x46,R(0x46)+1);
+        }
         C.guest_round=0;C.owner=C.anchor;project(&C.player[C.owner]);
         P(0x40,C.raw[C.owner]);P(0x42,0);
     }
@@ -92,6 +102,32 @@ static int actor_end(uint16_t address){
 void mm6_coop_arrival(void){
     if(!s_on || cyc_mod_isolated())return;
     C.initialized=0;C.eligible=1;C.owner=C.anchor=C.guest_round=0;
+    if(C.retry==1)C.retry=2;
+}
+static int dying(uint16_t address){
+    (void)address;if(s_on && C.initialized && !cyc_mod_isolated())C.dead[C.owner]=1;
+    return 0;
+}
+static int death_music(uint16_t address){
+    (void)address;
+    if(!s_on || !C.initialized || cyc_mod_isolated() || !C.dead[C.owner] || C.dead[C.owner^1])return 0;
+    /* ED3E's first request stops the common music. Keep the native death
+     * cue and timed particles, while the surviving seat keeps its stage BGM. */
+    CycModRegs r;cyc_mod_regs(&r);r.a=255;cyc_mod_set_regs(&r);return 0;
+}
+static int retry(uint16_t address){
+    (void)address;if(!s_on || !C.initialized || cyc_mod_isolated())return 0;
+    int seat=C.owner,other=seat^1;C.dead[seat]=2;
+    if(C.dead[other] && !C.retry){
+        /* The first completed native death owns the one shared-life retry.
+         * Its original E83/E456 path, stack and high-level scene keep running. */
+        capture(&C.player[seat]);
+        for(int p=0;p<2;p++)for(int i=0;i<10;i++)C.retry_ammo[p][i]=(uint8_t)mm6_coop_read(p,0x688+i);
+        C.retry=1;return 0;
+    }
+    /* A surviving partner keeps the real world active. Return through the
+     * original actor caller; no guest clocks, stack or bank state are copied. */
+    P(0x3A0,0);P(0x3FC,255);P(0x3E5,255);return 1;
 }
 void mm6_coop_input(uint8_t buttons[2]){
     if(!s_on)return;
@@ -159,12 +195,15 @@ void mm6_coop_set(int enabled,int roster){
     s_on=enabled!=0;s_roster=roster!=0;C.initialized=C.eligible=C.owner=C.anchor=C.guest_round=0;
     nes_mod_set_function_hook_enabled("mm6.coop.begin",s_on);nes_mod_set_function_hook_enabled("mm6.coop.actor-end",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.animation-stop",s_on);mm6_view_coop(s_on);
+    nes_mod_set_function_hook_enabled("mm6.coop.dying",s_on);nes_mod_set_function_hook_enabled("mm6.coop.pit",s_on);
+    nes_mod_set_function_hook_enabled("mm6.coop.retry",s_on);
+    nes_mod_set_function_hook_enabled("mm6.coop.death-music",s_on);
     nes_mod_set_local_only("MM6 native co-op prototype (unqualified netplay)",s_on);
 }
-static int get(uint8_t *out,int cap){if(cap<sizeof C)return -1;memcpy(C.magic,"M6C3",4);C.enabled=(uint8_t)s_on;C.roster=(uint8_t)s_roster;memcpy(out,&C,sizeof C);return sizeof C;}
+static int get(uint8_t *out,int cap){if(cap<sizeof C)return -1;memcpy(C.magic,"M6C4",4);C.enabled=(uint8_t)s_on;C.roster=(uint8_t)s_roster;memcpy(out,&C,sizeof C);return sizeof C;}
 static int valid(const uint8_t *in,int len){
     if(!len)return !s_on;if(!in || len!=sizeof C)return 0;Coop p;memcpy(&p,in,sizeof p);
-    if(memcmp(p.magic,"M6C3",4) || p.enabled!=s_on || p.roster!=s_roster || p.initialized>1 || p.eligible>1 || p.owner>1 || p.anchor>1 || p.guest_round>1 || (p.initialized && p.owner!=(p.anchor^p.guest_round)))return 0;
+    if(memcmp(p.magic,"M6C4",4) || p.enabled!=s_on || p.roster!=s_roster || p.initialized>1 || p.eligible>1 || p.owner>1 || p.anchor>1 || p.guest_round>1 || p.dead[0]>2 || p.dead[1]>2 || p.retry>2 || (p.initialized && p.owner!=(p.anchor^p.guest_round)))return 0;
     const Picture *pictures[2]={&p.build,&p.frame};
     for(int k=0;k<2;k++){
         const Picture *q=pictures[k];if(q->valid>1 || q->seat>1 || q->count>PART_CAP || q->body.pose>=CYC_PROTO_POSE_COUNT || q->body.active>1 || q->body.form>2)return 0;
@@ -176,11 +215,15 @@ static int set(const uint8_t *in,int len){if(!valid(in,len))return 0;if(len)memc
 void mm6_coop_register(void){
     addresses();nes_mod_register_function_entry_plugin("mm6.coop.begin",0xE41C,begin);nes_mod_register_function_entry_plugin("mm6.coop.actor-end",0xE47A,actor_end);
     nes_mod_register_function_entry_plugin("mm6.coop.animation-stop",0xE24B,animation_stop);
+    nes_mod_register_function_entry_plugin("mm6.coop.dying",0x8E62,dying);
+    nes_mod_register_function_entry_plugin("mm6.coop.pit",0x8F03,dying);
+    nes_mod_register_function_entry_plugin("mm6.coop.retry",0x8E83,retry);
+    nes_mod_register_function_entry_plugin("mm6.coop.death-music",0xED40,death_music);
     nes_mod_register_savestate_hook("mm6.coop",get,set);nes_mod_register_savestate_validator("mm6.coop",valid);
 }
 int mm6_coop_json(char *out,int cap){
-    return snprintf(out,cap,"\"coop\":{\"on\":%d,\"ready\":%u,\"owner\":%u,\"round\":%u,\"world\":%llu,\"updates\":[%llu,%llu],\"players\":[[%d,%d,%d,%d,%d],[%d,%d,%d,%d,%d]]}",
-        s_on,C.initialized,C.owner,C.guest_round,(unsigned long long)C.world,(unsigned long long)C.updates[0],(unsigned long long)C.updates[1],
+    return snprintf(out,cap,"\"coop\":{\"on\":%d,\"ready\":%u,\"owner\":%u,\"round\":%u,\"anchor\":%u,\"dead\":[%u,%u],\"retry\":%u,\"lives\":%u,\"world\":%llu,\"updates\":[%llu,%llu],\"players\":[[%d,%d,%d,%d,%d],[%d,%d,%d,%d,%d]]}",
+        s_on,C.initialized,C.owner,C.guest_round,C.anchor,C.dead[0],C.dead[1],C.retry,R(0xA9),(unsigned long long)C.world,(unsigned long long)C.updates[0],(unsigned long long)C.updates[1],
         mm6_coop_read(0,0x486),mm6_coop_read(0,0x4CB),mm6_coop_read(0,0x3E5),mm6_coop_read(0,0x94),mm6_coop_read(0,0x699),
         mm6_coop_read(1,0x486),mm6_coop_read(1,0x4CB),mm6_coop_read(1,0x3E5),mm6_coop_read(1,0x94),mm6_coop_read(1,0x699));
 }

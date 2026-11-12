@@ -18,6 +18,7 @@ int mm6_proto_swapping(void);
 int mm6_proto_json(char *out,int capacity);
 void mm6_proto_body(Mm6ProtoBody *body);
 void mm6_proto_animation(int animation);
+void mm6_proto_clone_animation(int from,int to);
 const CycProtoAtlas *mm6_proto_atlas(void);
 void mm6_view_enable(int enabled);
 void mm6_view_power(void);

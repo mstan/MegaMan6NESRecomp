@@ -140,3 +140,27 @@ id = "mm6.coop.animation-stop"
 addr = 0xE24B
 length = 8
 crc32 = 0x02204B18
+
+[[mod_function_hook]]
+id = "mm6.coop.dying"
+addr = 0x8E62
+length = 8
+crc32 = 0x1891EAA3
+
+[[mod_function_hook]]
+id = "mm6.coop.pit"
+addr = 0x8F03
+length = 8
+crc32 = 0xEC8EC6F2
+
+[[mod_function_hook]]
+id = "mm6.coop.retry"
+addr = 0x8E83
+length = 8
+crc32 = 0x92EF9573
+
+[[mod_function_hook]]
+id = "mm6.coop.death-music"
+addr = 0xED40
+length = 8
+crc32 = 0x78A4057B

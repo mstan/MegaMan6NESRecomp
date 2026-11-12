@@ -62,10 +62,14 @@ MegaMan6Recomp.exe "/path/to/Mega Man 6 (USA).nes" --coop on --weapon-cycle on
 
 Either controller can open and operate its own native inventory while the world pauses. The menu page, cursor, equipment and ammo belong to that player; E-tanks and stage progress remain shared. Native base/form and weapon graphics packets keep different equipped weapons from sharing the wrong patterns.
 
-This is an initial local implementation. Partner HUD, complete weapon and adapter behavior, death/retry and stage transitions, all view modes, adaptive widescreen and online play remain unfinished. Online sessions are explicitly blocked while these development features are active.
+An individual death retains the native cue and particles while the partner keeps playing with stage music. The last death uses one shared life and the native retry, restoring both players to full HP and their own ammo with the native Buster selection. Both death orders, a load during the partner's actual in-flight death routine, and native/interpreter execution have targeted coverage. These assisted routes set health, inventory and projectile/position prerequisites; they leave deaths, the life decrement and retry to the native game.
+
+This is an initial local implementation. Partner HUD, complete weapon and adapter behavior, checkpoint revival, withdrawal/rejoin, game-over handling and stage transitions, all view modes, adaptive widescreen and online play remain unfinished. Online sessions are explicitly blocked while these development features are active.
 
 ```text
 python tools/qa_route.py tests/routes/coop-controls.route --frames 4700 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-controls --extra=--coop --extra=on
 python tools/qa_route.py tests/routes/coop-traits.route --frames 4400 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-traits --extra=--coop --extra=on
 python tools/qa_route.py tests/routes/coop-weapons.route --frames 4850 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-weapons --extra=--coop --extra=on --extra=--weapon-cycle --extra=on
+python tools/qa_route.py tests/routes/coop-life.route --frames 5400 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-life --extra=--coop --extra=on
+python tools/qa_route.py tests/routes/coop-life-reverse.route --frames 5600 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-life-reverse --extra=--coop --extra=on
 ```
