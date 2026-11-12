@@ -2,15 +2,18 @@
 #include "mm6_proto.h"
 #include "mm6_coop.h"
 #include "mm6_sprites.h"
+#include "mm6_world.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
+#include "cyc_video.h"
+#include "mod_runtime.h"
 #include "mod_function_hooks.h"
 #include "mod_savestate.h"
 #include <stdio.h>
 #include <string.h>
 typedef struct {char magic[4];uint8_t valid,owner,owners[64];Mm6ProtoBody body;} ViewFrame;
 static ViewFrame s_build,s_frame;
-static int s_enabled,s_coop,s_no_flicker;
+static int s_enabled,s_coop,s_no_flicker,s_wide;
 static uint32_t s_bg[256*240];
 static uint8_t s_opaque[864*240],s_claimed[864*240],s_allowed[64][240];
 static int begin(uint16_t address) {
@@ -58,7 +61,7 @@ static void body(uint32_t *out,int W,int origin,const Mm6ProtoBody *b) {
         int dx=x-p->origin_x,dy=y+p->top_y;
         int px=b->x+(b->right?-dx-1:dx),py=b->y+(b->flipped?-dy:dy+1);
         if(origin+px<0 || origin+px>=W || py<0 || py>=240 || !(cyc_render_line_mask(py)&16) ||
-            (px<8 && !(cyc_render_line_mask(py)&4)))continue;
+            (origin+px<8 && !(cyc_render_line_mask(py)&4)))continue;
         int at=py*W+origin+px;if(s_claimed[at])continue;s_claimed[at]=1;
         if(!b->behind || !s_opaque[at])out[at]=color(index,b);
     }
@@ -75,7 +78,7 @@ static void sprite(uint32_t *out,int W,int origin,int slot,const uint8_t *oam) {
         int lo=cyc_render_chr(a),hi=cyc_render_chr(a+8);
         for(int x=0;x<8;x++) {
             int px=o[3]+x,bit=(o[2]&64)?x:7-x,v=((lo>>bit)&1)|(((hi>>bit)&1)<<1);
-            if(!v || origin+px>=W || (px<8 && !(cyc_render_line_mask(py)&4)))continue;
+            if(!v || origin+px>=W || (origin+px<8 && !(cyc_render_line_mask(py)&4)))continue;
             int at=py*W+origin+px;if(s_claimed[at])continue;s_claimed[at]=1;
             if(!(o[2]&32) || !s_opaque[at]){
                 int palette=o[2]&3;
@@ -91,7 +94,8 @@ static int render(uint32_t *out,int W,int H,int native_x0,const uint32_t *native
     (void)ctx;(void)native_x0;(void)native;
     if(cyc_mod_peek(0x3a0)!=4 || (cyc_mod_peek(0x3b7)&2))return 0;
     int replace=s_enabled && s_frame.valid && s_frame.body.active;
-    if((!replace && !mm6_coop_has_frame() && !(s_no_flicker && mm6_sprites_ready())) || W<256 || W>864 || H!=240 || !cyc_render_background(s_bg))return 0;
+    if((!replace && !mm6_coop_has_frame() && !(s_no_flicker && mm6_sprites_ready()) && !s_wide) || W<256 || W>864 || H!=240 || !cyc_render_background(s_bg))return 0;
+    mm6_world_audit(s_bg);
     int origin=(W-256)/2;
     memset(s_opaque,0,sizeof s_opaque);memset(s_claimed,0,(size_t)W*H);
     for(int i=0;i<W*H;i++)out[i]=0xff000000u;
@@ -100,6 +104,7 @@ static int render(uint32_t *out,int W,int H,int native_x0,const uint32_t *native
         memcpy(out+y*W+origin,s_bg+y*256,256*sizeof *out);
         memcpy(s_opaque+y*W+origin,opaque+y*256,256);
     }
+    if(s_wide)mm6_world_background(out,W,s_bg,s_opaque,&origin);
     const uint8_t *oam=cyc_render_oam();uint8_t counts[240]={0};memset(s_allowed,0,sizeof s_allowed);
     int first=64;
     for(int slot=0;slot<64;slot++) {
@@ -125,7 +130,7 @@ void mm6_view_power(void) {
     s_build.owner=s_frame.owner=255;
 }
 static void refresh(void) {
-    int active=s_enabled || s_coop || s_no_flicker;mm6_sprites_active(active);
+    int active=s_enabled || s_coop || s_no_flicker || s_wide;mm6_sprites_active(active);
     static const char *const ids[]={"begin","frame","actor","part0","part1","part2","part3","dma","animation","animation-update","complete","complete-full"};
     for(int i=0;i<sizeof ids/sizeof *ids;i++){char id[48];snprintf(id,sizeof id,"mm6.view.%s",ids[i]);nes_mod_set_function_hook_enabled(id,active);}
     cyc_render_set_compositor(active?render:NULL,NULL);cyc_render_set_stock_compositing(active);cyc_render_capture_background(active);
@@ -133,13 +138,22 @@ static void refresh(void) {
 void mm6_view_enable(int enabled){s_enabled=enabled!=0;refresh();}
 void mm6_view_coop(int enabled){s_coop=enabled!=0;refresh();}
 void mm6_view_no_flicker(int enabled){s_no_flicker=enabled!=0;refresh();}
+void mm6_view_wide(int enabled,const char *aspect){
+    s_wide=enabled!=0;int mode=NES_VIDEO_FIT;
+    if(aspect && !strcmp(aspect,"stock"))mode=NES_VIDEO_STOCK;
+    else if(aspect && !strcmp(aspect,"16-9"))mode=NES_VIDEO_16_9;
+    else if(aspect && !strcmp(aspect,"21-9"))mode=NES_VIDEO_21_9;
+    else if(aspect && !strcmp(aspect,"32-9"))mode=NES_VIDEO_32_9;
+    cyc_video_set_mode(s_wide?mode:NES_VIDEO_STOCK);
+    nes_mod_set_local_only("MM6 horizontal terrain prototype (unqualified netplay)",s_wide);refresh();
+}
 static int get(uint8_t *out,int cap) {
     if(cap<sizeof s_build+sizeof s_frame)return -1;
     memcpy(s_build.magic,"M6V1",4);memcpy(s_frame.magic,"M6V1",4);
     memcpy(out,&s_build,sizeof s_build);memcpy(out+sizeof s_build,&s_frame,sizeof s_frame);return sizeof s_build+sizeof s_frame;
 }
 static int valid(const uint8_t *in,int len) {
-    if(!len)return !(s_enabled || s_coop || s_no_flicker);if(!in || len!=sizeof s_build+sizeof s_frame)return 0;
+    if(!len)return !(s_enabled || s_coop || s_no_flicker || s_wide);if(!in || len!=sizeof s_build+sizeof s_frame)return 0;
     ViewFrame p[2];memcpy(p,in,sizeof p);
     for(int i=0;i<2;i++) {
         if(memcmp(p[i].magic,"M6V1",4) || p[i].valid>1 || (p[i].owner>22 && p[i].owner!=255))return 0;

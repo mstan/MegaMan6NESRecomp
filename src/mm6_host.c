@@ -1,5 +1,6 @@
 /* Native MM6 equipment, palette and CHR-RAM descriptors remain authoritative. */
 #include "mm6_proto.h"
+#include "mm6_world.h"
 #include "mm6_coop.h"
 #include "mm6_charge.h"
 #include "cyc_host_extras.h"
@@ -24,6 +25,8 @@ static int s_coop,s_roster;
 static uint8_t *s_cart;
 static size_t s_size;
 static FILE *s_log;
+static int s_wide;
+static char s_aspect[16]="fit";
 static unsigned prg(unsigned bank,unsigned address) {
     size_t at=(size_t)bank*8192+(address&8191);
     return at<s_size?s_cart[at]:255;
@@ -165,6 +168,15 @@ static bool option(void *ctx,const char *name,const char *value) {
         mm6_coop_set(s_coop,s_roster);mm6_controls_refresh();return true;
     }
     if(!strcmp(name,"--mm6-controls-log")){if(s_log)fclose(s_log);s_log=fopen(value,"w");return s_log!=NULL;}
+    if(!strcmp(name,"--world-audit"))return mm6_world_audit_file(value)!=0;
+    if(!strcmp(name,"--wide")){
+        if(strcmp(value,"on") && strcmp(value,"off"))return false;
+        s_wide=!strcmp(value,"on");mm6_view_wide(s_wide,s_aspect);return true;
+    }
+    if(!strcmp(name,"--aspect")){
+        if(strcmp(value,"fit") && strcmp(value,"stock") && strcmp(value,"16-9") && strcmp(value,"21-9") && strcmp(value,"32-9"))return false;
+        snprintf(s_aspect,sizeof s_aspect,"%s",value);mm6_view_wide(s_wide,s_aspect);return true;
+    }
     if(!strcmp(name,"--no-flicker")){
         if(strcmp(value,"on") && strcmp(value,"off"))return false;
         mm6_view_no_flicker(!strcmp(value,"on"));return true;
@@ -194,7 +206,7 @@ static int valid(const uint8_t *in,int len) {
     return 1;
 }
 static int set(const uint8_t *in,int len) {if(!valid(in,len))return 0;if(len)memcpy(s_players,in,sizeof s_players);else memset(s_players,0,sizeof s_players);return 1;}
-static void reset(void){enabled(0);s_coop=0;mm6_coop_set(0,s_roster);s_proto_on=0;mm6_proto_set(0,s_proto_mode,s_proto_start);mm6_view_no_flicker(0);}
+static void reset(void){enabled(0);s_coop=0;mm6_coop_set(0,s_roster);s_proto_on=0;mm6_proto_set(0,s_proto_mode,s_proto_start);mm6_view_no_flicker(0);s_wide=0;mm6_view_wide(0,s_aspect);}
 static void activate(void){enabled(1);}
 static void no_flicker(void){mm6_view_no_flicker(1);}
 NES_MOD_CONSTRUCTOR(register_mm6_controls) {
@@ -218,8 +230,11 @@ const CycHostExtras *cyc_host_extras(void) {
         {"--proto-start",true,"protoman|megaman: starting character"},
         {"--coop",true,"on|off: development native coroutine controls prototype"},
         {"--coop-roster",true,"megaman-protoman|protoman-megaman: development roster"},
-        {"--no-flicker",true,"on|off: complete native sprite presentation"}};
+        {"--no-flicker",true,"on|off: complete native sprite presentation"},
+        {"--world-audit",true,"FILE: native horizontal terrain conformance for QA"},
+        {"--wide",true,"on|off: development authored horizontal terrain"},
+        {"--aspect",true,"fit|stock|16-9|21-9|32-9: development terrain aspect"}};
     static const CycHostExtras extras={.power_on=power,.input=input,.frame_end=end,.option=option,
-        .options=options,.option_count=8,.input_profile=&profile};
+        .options=options,.option_count=11,.input_profile=&profile};
     return &extras;
 }

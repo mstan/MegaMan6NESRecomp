@@ -21,6 +21,16 @@ python tools/qa_route.py tests/routes/boot-play.route --exe build/Release/MegaMa
 
 The route helper is adapted from MegaMan2NESRecomp under the included license and additional permissions. No game cartridge bytes or extracted donor assets are included.
 
+## Development adaptive terrain
+
+`--wide on --aspect fit` extends horizontal terrain from the native layout, block, metatile and palette tables. Authored director records bound connected horizontal rooms; vertical and unrecognized scene layouts retain the native view. The original viewport remains intact, with its clipped left edge filled when that edge moves inside the wider picture.
+
+```text
+MegaMan6Recomp.exe "/path/to/Mega Man 6 (USA).nes" --wide on --aspect fit --no-flicker on
+```
+
+Fit has targeted checks at 256, 426, 568 and 854 pixels, with native/interpreter agreement and current-build moving-scene continuation. Terrain conformance retains the original game's edge differences separately: each such pixel must be reproduced from live native CIRAM. Wider actor activation/culling, all scenes and fresh launcher defaults remain in progress; this initial terrain slice does not establish complete widescreen acceptance.
+
 ## Quick weapon switching
 
 The default-on optional package maps L/R (LB/RB) to the previous/next acquired weapon or Beat in normal form. It wraps, skips locked equipment and includes empty weapons. Held presses change once; simultaneous shoulders cancel. The native inventory chooses Jet and Power adapters, whose native weapon restrictions are retained. Native graphics, palettes and personal shot cleanup come from the supplied cartridge's own tables.
