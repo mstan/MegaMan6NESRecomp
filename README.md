@@ -31,7 +31,7 @@ MegaMan6Recomp.exe "/path/to/Mega Man 6 (USA).nes" --wide on --aspect fit --no-f
 
 Ordinary authored enemies in the added horizontal area use their original constructor, AI, projectiles and collision routines. The stage director stays on its native camera. Signed world positions place complete sprite packets without byte-wrapped duplicates in the original viewport. A killed authored enemy stays absent until its spawn position leaves the complete view, including when the native camera later reaches that position. Failed native allocations remain eligible for retry.
 
-Fit has targeted checks at 256, 426, 568 and 854 pixels, with native/interpreter agreement and current-build moving-scene continuation. Terrain conformance retains the original game's edge differences separately: each such pixel must be reproduced from live native CIRAM. An assisted combat route activates six authored actors, damages and kills two margin enemies through original shots, and retains their identities without immediate respawn. The 740-frame cold continuation reproduces the first picture and PCM; the sprite-limit option changes presentation while hardware execution and audio stay identical. Stock width matches the disabled extension. Actor pool pressure, all scenes, co-op view unions and fresh launcher defaults remain in progress; these targeted checks do not establish complete widescreen acceptance.
+Fit has targeted checks at 256, 426, 568 and 854 pixels, with native/interpreter agreement and current-build moving-scene continuation. Terrain conformance retains the original game's edge differences separately: each such pixel must be reproduced from live native CIRAM. An assisted combat route activates six authored actors, damages and kills two margin enemies through original shots, and retains their identities without immediate respawn. The 740-frame cold continuation reproduces the first picture and PCM; the sprite-limit option changes presentation while hardware execution and audio stay identical. Stock width matches the disabled extension. Actor pool pressure, all scenes and fresh launcher defaults remain in progress; these targeted checks do not establish complete widescreen acceptance.
 
 ## Quick weapon switching
 
@@ -88,7 +88,15 @@ The optional, default-on **No sprite flicker** display package captures complete
 
 A targeted death-effect scene captures 109 native parts, including all nine survivor parts omitted by the full hardware OAM. On/off gameplay and PCM match; native/interpreter runs and a cold load reproduce the complete packets and first picture. A fresh packaged catalog enables the option, and a simple gameplay scene matches the original native pixels exactly. These checks do not establish complete stage coverage.
 
-This is an initial local implementation. Complete weapon and adapter behavior, checkpoint revival, withdrawal/rejoin, complete stage transitions, all view modes, complete adaptive widescreen and online play remain unfinished. Online sessions are explicitly blocked while these development features are active.
+`--coop-view split|player1|player2` provides independent 256-pixel horizontal views; split uses two adjacent panes. The in-game Display menu can switch views, including between the two individual views while paused. Logical view widths remain stable through Fit/aspect and window changes; returning to Shared restores the selected aspect policy. Each pane has its own native health/equipment meters. Connected horizontal terrain comes from the native tables, while vertical and scripted scenes retain their native camera.
+
+Ordinary actors activate across the union of the two views, excluding the empty gap. Their native identities retire when they leave that union and can respawn after returning. The distant partner retains real movement, shots and native collisions. When the anchor dies in a recognized horizontal room, the survivor takes ownership of the original player and camera without a shared retry or life loss. Both death orders, native/interpreter execution, current-build cold loads, terrain pixels and actor reentry have targeted coverage. Unprotected native enemy hits continue to damage the survivor normally.
+
+```text
+python tools/qa_views.py --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/views
+```
+
+This is an initial local implementation. Complete weapon and adapter behavior, checkpoint revival, withdrawal/rejoin, complete stage transitions, independent personal menus, scripted/vertical view coordination, complete adaptive widescreen and online play remain unfinished. Online sessions are explicitly blocked while these development features are active.
 
 ```text
 python tools/qa_route.py tests/routes/coop-controls.route --frames 4700 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-controls --extra=--coop --extra=on

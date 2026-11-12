@@ -30,6 +30,7 @@ void mm6_view_wide(int enabled,const char *aspect);
 void mm6_view_draw_character(uint32_t *out,int width,int origin,const Mm6ProtoBody *body);
 void mm6_view_draw_adapter_head(uint32_t *out,int width,int origin,const Mm6ProtoBody *body);
 int mm6_view_adapter_head_mask(const Mm6ProtoBody *body,int x,int y);
+int mm6_view_panel_painting(void);
 int mm6_controls_hurt(void);
 void mm6_controls_refresh(void);
 int mm6_controls_restore_palette(void);

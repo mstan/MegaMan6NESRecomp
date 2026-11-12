@@ -71,7 +71,7 @@ void mm6_sprites_draw(uint32_t *out,int width,int origin,const Mm6ProtoBody *bod
         if(!p->owner && body->active==2 && !drawn){mm6_view_draw_adapter_head(out,width,origin,body);drawn=1;}
         for(int y=0;y<8;y++)for(int x=0;x<8;x++){
             int v=p->pixels[y*8+x],px=left+x,py=p->y+y;if(!allowed[y])continue;
-            if(!v || px<0 || px>=width || py>=240 || !(cyc_render_line_mask(py)&16) || (px<8 && !(cyc_render_line_mask(py)&4)))continue;
+            if(!v || px<0 || px>=width || py>=240 || !(cyc_render_line_mask(py)&16) || (!mm6_view_panel_painting() && px<8 && !(cyc_render_line_mask(py)&4)))continue;
             if(!p->owner && mm6_view_adapter_head_mask(body,px-origin,py))continue;
             int at=py*width+px;if(claimed[at])continue;claimed[at]=1;
             if(!(p->attr&32) || !opaque[at]){int c=(int)p->colors[v]-(int)R(0x48);out[at]=cyc_render_color_value(c<0?15:c&63);}

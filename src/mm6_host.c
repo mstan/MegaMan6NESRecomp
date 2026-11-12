@@ -5,6 +5,10 @@
 #include "mm6_coop.h"
 #include "mm6_charge.h"
 #include "cyc_host_extras.h"
+#include "cyc_tcp.h"
+#ifdef CYC_WITH_RECOMP_UI
+#include "recomp_runtime_ui.h"
+#endif
 #include "cyc_input.h"
 #include "cyc_mod.h"
 #include "cyc_ring.h"
@@ -157,6 +161,11 @@ static void end(void *ctx) {
 }
 static bool option(void *ctx,const char *name,const char *value) {
     (void)ctx;
+    if(!strcmp(name,"--mm6-coop-poke"))return mm6_coop_test_poke(value)!=0;
+    if(!strcmp(name,"--coop-view")){
+        int mode=!strcmp(value,"shared")?0:!strcmp(value,"split")?1:!strcmp(value,"player1")?2:!strcmp(value,"player2")?3:-1;
+        if(mode<0)return false;mm6_coop_view_set(mode);return true;
+    }
     if(!strcmp(name,"--coop") || !strcmp(name,"--coop-roster")) {
         if(!strcmp(name,"--coop")) {
             if(strcmp(value,"on") && strcmp(value,"off"))return false;
@@ -222,6 +231,35 @@ NES_MOD_CONSTRUCTOR(register_mm6_controls) {
     nes_mod_register_reset_callback(reset);nes_mod_register_activation_plugin("mega-man-6-usa.weapons",activate);
     nes_mod_register_activation_plugin("mega-man-6-usa.noflicker",no_flicker);
 }
+static void tcp_state(int id,const char *line){
+    char view[16];if(cyc_tcp_str(line,"view",view,sizeof view)){
+        int mode=!strcmp(view,"shared")?0:!strcmp(view,"split")?1:!strcmp(view,"player1")?2:!strcmp(view,"player2")?3:-1;
+        if(mode<0 || !mm6_coop_enabled()){cyc_tcp_err(id,"view needs active co-op and shared|split|player1|player2");return;}
+        mm6_coop_view_set(mode);
+    }
+    char fields[1024];int n=snprintf(fields,sizeof fields,"\"view\":%d,",mm6_coop_view_mode());
+    mm6_coop_json(fields+n,sizeof fields-n);cyc_tcp_ok(id,fields);
+}
+static void tcp(void *ctx){(void)ctx;cyc_tcp_register("mm6_state","MM6 co-op state and local view selection",tcp_state);}
+#ifdef CYC_WITH_RECOMP_UI
+static int menu_get(void *ctx,const RecompRuntimeUiItem *item,int *out){
+    (void)ctx;if(strcmp(item->key,"mm6.coop_view"))return 0;*out=mm6_coop_view_mode();return 1;
+}
+static int menu_set(void *ctx,const RecompRuntimeUiItem *item,int value){
+    (void)ctx;if(strcmp(item->key,"mm6.coop_view") || !mm6_coop_enabled() || value<0 || value>3)return 0;
+    mm6_coop_view_set(value);return mm6_coop_view_mode()==value;
+}
+static int menu_enabled(void *ctx,const RecompRuntimeUiItem *item){
+    (void)ctx;return !strcmp(item->key,"mm6.coop_view") && mm6_coop_enabled();
+}
+static const char *const view_choices[]={"Shared screen","Split screen","Player one","Player two"};
+static const RecompRuntimeUiItem menu_items[]={
+    {.key="mm6.coop_view",.section="Display",.label="Two-player view",
+     .description="Choose a shared screen, split screen, or either player.",
+     .type=RECOMP_RUNTIME_UI_CHOICE,.minimum=0,.maximum=3,.step=1,.choices=view_choices,.choice_count=4}
+};
+static const RecompRuntimeUiCallbacks menu_callbacks={.get_value=menu_get,.set_value=menu_set,.is_enabled=menu_enabled};
+#endif
 const CycHostExtras *cyc_host_extras(void) {
     static const CycInputProfile profile={.id="megaman-weapons-1",.game_label={"Previous weapon (L)","Next weapon (R)"},
         .game_pad={"leftshoulder","rightshoulder"},.shortcut_pad={"none","leftstick+rightstick",NULL,NULL,NULL,NULL,NULL}};
@@ -235,8 +273,14 @@ const CycHostExtras *cyc_host_extras(void) {
         {"--no-flicker",true,"on|off: complete native sprite presentation"},
         {"--world-audit",true,"FILE: native horizontal terrain conformance for QA"},
         {"--wide",true,"on|off: development authored horizontal terrain"},
-        {"--aspect",true,"fit|stock|16-9|21-9|32-9: development terrain aspect"}};
-    static const CycHostExtras extras={.power_on=power,.input=input,.frame_end=end,.option=option,
-        .options=options,.option_count=11,.input_profile=&profile};
+        {"--aspect",true,"fit|stock|16-9|21-9|32-9: development terrain aspect"},
+        {"--coop-view",true,"shared|split|player1|player2: local co-op presentation"},
+        {"--mm6-coop-poke",true,"FRAME:SEAT:HEX_ADDRESS:HEX_VALUE: personal QA prerequisite"}};
+    static const CycHostExtras extras={.power_on=power,.input=input,.frame_end=end,.option=option,.tcp_setup=tcp,
+        .options=options,.option_count=sizeof options/sizeof *options,.input_profile=&profile,
+#ifdef CYC_WITH_RECOMP_UI
+        .menu_items=menu_items,.menu_item_count=sizeof menu_items/sizeof *menu_items,.menu_callbacks=&menu_callbacks,
+#endif
+    };
     return &extras;
 }

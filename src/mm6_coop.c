@@ -2,8 +2,12 @@
 #include "mm6_coop.h"
 #include "mm6_proto.h"
 #include "mm6_charge.h"
+#include "mm6_world.h"
+#include "mm6_wide.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
+#include "cyc_video.h"
+#include "cyc_ring.h"
 #include "mod_function_hooks.h"
 #include "mod_runtime.h"
 #include "mod_savestate.h"
@@ -23,13 +27,36 @@ typedef struct {
     Picture build,frame;
 } Coop;
 static Coop C;
-static int s_on,s_roster,s_count,s_animating;
+static int s_on,s_roster,s_count,s_animating,s_view;
 static uint16_t s_addr[PERSONAL_CAP],s_index[2048];
 int mm6_coop_enabled(void){return s_on;}
 int mm6_coop_ready(void){return s_on && C.initialized;}
 int mm6_coop_seat(void){return s_on?C.owner:0;}
 int mm6_coop_character(void){return s_on?(s_roster^C.owner):-1;}
 int mm6_coop_character_for(int seat){return s_on && seat>=0 && seat<2?(s_roster^seat):0;}
+int mm6_coop_independent(void){return s_on && s_view!=0;}
+int mm6_coop_view_mode(void){return s_on?s_view:0;}
+int mm6_coop_scene_locked(void){return R(0x47) || R(0x58) || R(0x59) || R(0x60) || R(0x642);}
+void mm6_coop_view_set(int mode){
+    if(mode<0 || mode>3)return;
+    s_view=mode;mm6_view_coop(s_on);mm6_wide_views_changed();
+    cyc_video_override_width(mm6_coop_independent()?(s_view==1?512:256):0);
+}
+int mm6_coop_view_rects(int left[2]){
+    if(!s_on || !C.initialized)return 0;
+    int camera=(R(0x57)<<8)|R(0x56),lo,hi;
+    int free_camera=!mm6_coop_scene_locked() && mm6_world_bounds(&lo,&hi);
+    for(int seat=0;seat<2;seat++){
+        int who=C.dead[seat]?C.anchor:seat;left[seat]=camera;
+        if(free_camera){
+            int x=(mm6_coop_read(who,0x46F)<<8)|mm6_coop_read(who,0x486);
+            left[seat]=x-128;if(left[seat]<lo)left[seat]=lo;if(left[seat]>hi-256)left[seat]=hi-256;
+        }
+    }
+    return 2;
+}
+typedef struct {uint32_t frame;uint16_t address;uint8_t seat,value;} TestPoke;
+static TestPoke s_test_pokes[64];static int s_test_poke_count;
 static void addresses(void){
     if(s_count)return;
     /* Native Buster1..3, Beat4, hurt effect5 and friendly ricochets6/7.
@@ -53,6 +80,19 @@ static void project(const Player *p){
 }
 static int personal(const Player *p,int a){int i=s_index[a];return i?p->ram[i-1]:R(a);}
 static void put(Player *p,int a,int v){int i=s_index[a];if(i)p->ram[i-1]=(uint8_t)v;}
+int mm6_coop_test_poke(const char *value){
+    unsigned frame,seat,address,byte;int n=0;addresses();
+    if(!value || s_test_poke_count>=64 || sscanf(value,"%u:%u:%x:%x%n",&frame,&seat,&address,&byte,&n)!=4 ||
+        value[n] || seat>1 || address>=2048 || !s_index[address] || byte>255)return 0;
+    s_test_pokes[s_test_poke_count++]=(TestPoke){frame,(uint16_t)address,(uint8_t)seat,(uint8_t)byte};
+    nes_mod_set_local_only("MM6 personal RAM QA fixture",1);return 1;
+}
+static void test_pokes(void){
+    for(int i=0;i<s_test_poke_count;i++)if(s_test_pokes[i].frame==cyc_ring_frame){
+        const TestPoke *p=&s_test_pokes[i];put(&C.player[p->seat],p->address,p->value);
+        if(p->seat==C.owner)P(p->address,p->value);
+    }
+}
 int mm6_coop_read(int seat,int a){
     if(seat<0 || seat>1 || a<0 || a>=2048)return 0;
     return C.initialized && seat!=C.owner?personal(&C.player[seat],a):R(a);
@@ -104,10 +144,25 @@ static int actor_end(uint16_t address){
          * E477 has already restored the original native stack base. */
         P(0x8F,8);
     }else{
+        int promoted=0;
         if(C.dead[C.anchor] && !C.dead[C.anchor^1]){
-            C.anchor^=1;P(0x46,R(0x46)+1);
+            C.anchor^=1;promoted=1;P(0x46,R(0x46)+1);
         }
         C.guest_round=0;C.owner=C.anchor;project(&C.player[C.owner]);
+        if(promoted && mm6_coop_independent() && !mm6_coop_scene_locked()){
+            int lo,hi;
+            if(mm6_world_bounds(&lo,&hi)){
+                int previous=(R(0x57)<<8)|R(0x56),camera=((R(0x46F)<<8)|R(0x486))-128;
+                if(camera<lo)camera=lo;if(camera>hi-256)camera=hi-256;
+                /* The surviving seat now owns the real native actor loop.
+                 * Transfer its horizontal camera before the native draw and
+                 * scroll code sees a body several pages away. 71's low bits
+                 * are the native right/left scroll permissions in this room. */
+                P(0x56,camera);P(0x57,camera>>8);P(0xF7,camera);
+                P(0x70,camera>=previous?1:2);
+                P(0x71,(R(0x71)&~3)|(camera<hi-256?1:0)|(camera>lo?2:0));
+            }
+        }
         P(0x40,C.raw[C.owner]);P(0x42,0);
     }
     return 0;
@@ -144,6 +199,9 @@ static int retry(uint16_t address){
 }
 void mm6_coop_input(uint8_t buttons[2]){
     if(!s_on)return;
+    /* A native world iteration can span several output frames. Scheduled
+     * personal fixtures belong to the frame input boundary, not E41C. */
+    if(C.initialized)test_pokes();
     for(int i=0;i<2;i++){
         C.raw[i]=buttons[i];
         if(C.initialized && !(R(0x3B7)&2))C.pending[i]|=(uint8_t)(buttons[i]&~C.previous[i]);
@@ -167,7 +225,11 @@ void mm6_coop_build(void){
     if(!cyc_mod_isolate_begin())return;
     int previous=C.owner,seat=C.anchor^1;C.owner=(uint8_t)seat;project(&C.player[seat]);
     uint8_t patterns[2048];
-    int camera=(R(0x57)<<8)|R(0x56),ok=mm6_controls_read_graphics(patterns),shown=0;C.build.camera=(uint16_t)camera;C.build.seat=(uint8_t)seat;
+    int camera=(R(0x57)<<8)|R(0x56),ok=mm6_controls_read_graphics(patterns),shown=0;
+    C.build.camera=(uint16_t)camera;C.build.seat=(uint8_t)seat;
+    if(mm6_coop_independent()){
+        int left[2];if(mm6_coop_view_rects(left)){camera=left[seat];P(0x56,camera);P(0x57,camera>>8);P(0xF7,camera);}
+    }
     /* CF4A also owns the native passive Jet-fuel recharge. The anchor runs
      * it in D1D4; the other seat needs that same once-per-draw operation. */
     P(0x8C,0);CycModRegs hud;cyc_mod_regs(&hud);if(ok)ok=cyc_mod_call(0xCF4A,&hud);
@@ -181,7 +243,7 @@ void mm6_coop_build(void){
         for(int offset=0;offset<256;offset+=4)P(0x200+offset,240);
         P(0x8C,0);P(0x00,R(0x486+slot)-R(0xF7));regs.x=(uint8_t)slot;
         ok=cyc_mod_call(0xE2A9,&regs);int end=R(0x8C);if(!end)end=256;
-        if(!slot){mm6_proto_body(&C.build.body);C.build.body.x=(int16_t)relative;shown=1;}
+        if(!slot){mm6_proto_body(&C.build.body);C.build.body.x=(int16_t)(relative+camera-C.build.camera);shown=1;}
         for(int offset=0;ok && offset<end && C.build.count<PART_CAP;offset+=4){
             int top=R(0x200+offset)+1;if(top>=240)continue;
             Part *p=&C.build.parts[C.build.count++];p->x=(int16_t)(camera+R(0x203+offset));p->y=(int16_t)top;
@@ -225,6 +287,7 @@ void mm6_coop_set(int enabled,int roster){
     nes_mod_set_function_hook_enabled("mm6.coop.retry",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.death-music",s_on);
     nes_mod_set_local_only("MM6 native co-op prototype (unqualified netplay)",s_on);
+    mm6_coop_view_set(s_view);
 }
 static int get(uint8_t *out,int cap){if(cap<sizeof C)return -1;memcpy(C.magic,"M6C4",4);C.enabled=(uint8_t)s_on;C.roster=(uint8_t)s_roster;memcpy(out,&C,sizeof C);return sizeof C;}
 static int valid(const uint8_t *in,int len){
