@@ -30,3 +30,5 @@ void mm6_controls_refresh(void);
 int mm6_controls_restore_palette(void);
 int mm6_controls_restore_graphics(void);
 int mm6_controls_read_graphics(uint8_t out[2048]);
+unsigned mm6_controls_prg(unsigned bank,unsigned address);
+int mm6_controls_palette_colors(int seat,int id,uint8_t out[8]);

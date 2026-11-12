@@ -1,0 +1,11 @@
+# Acquired inventory is a precondition; the shoulder performs the actual switch.
+INCLUDE proto-fixture.route
+2800 POKE 0689 1B
+4200 B
+4240 2:B
+4300 X1:R
+4301 X1:-
+4320 -
+4360 2:-
+4310 SAVESTATE switched
+4399 SAVESTATE end

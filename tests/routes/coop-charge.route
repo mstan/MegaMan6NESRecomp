@@ -1,0 +1,17 @@
+# Independent charge starts, native menu pause, individual releases.
+INCLUDE proto-fixture.route
+4200 B
+4240 2:B
+4280 2:B+START
+4281 2:B
+4360 2:B+START
+4361 2:B
+4450 -
+4520 2:-
+4250 SAVESTATE charging
+4282 SAVESTATE pause_entry
+4300 SAVESTATE paused
+4453 SAVESTATE p1_shot
+4470 SAVESTATE p2_charging
+4523 SAVESTATE p2_shot
+4599 SAVESTATE end

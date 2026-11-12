@@ -64,6 +64,8 @@ Either controller can open and operate its own native inventory while the world 
 
 An individual death retains the native cue and particles while the partner keeps playing with stage music. The last death uses one shared life and the native retry, restoring both players to full HP and their own ammo with the native Buster selection. Both death orders, a load during the partner's actual in-flight death routine, and native/interpreter execution have targeted coverage. These assisted routes set health, inventory and projectile/position prerequisites; they leave deaths, the life decrement and retry to the native game.
 
+Charge flashes belong to each character. Pausing freezes both effects; releasing a shot or changing equipment clears only that player's effect. A charged survivor retains the charge and its artwork after the partner dies. The small palette sequence reads the native cartridge's own packets; Buster movement, damage and allocation remain native.
+
 This is an initial local implementation. Partner HUD, complete weapon and adapter behavior, checkpoint revival, withdrawal/rejoin, game-over handling and stage transitions, all view modes, adaptive widescreen and online play remain unfinished. Online sessions are explicitly blocked while these development features are active.
 
 ```text
@@ -72,4 +74,5 @@ python tools/qa_route.py tests/routes/coop-traits.route --frames 4400 --exe buil
 python tools/qa_route.py tests/routes/coop-weapons.route --frames 4850 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-weapons --extra=--coop --extra=on --extra=--weapon-cycle --extra=on
 python tools/qa_route.py tests/routes/coop-life.route --frames 5400 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-life --extra=--coop --extra=on
 python tools/qa_route.py tests/routes/coop-life-reverse.route --frames 5600 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-life-reverse --extra=--coop --extra=on
+python tools/qa_route.py tests/routes/coop-charge.route --frames 4600 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-charge --extra=--coop --extra=on
 ```

@@ -1,6 +1,7 @@
 /* Each personal coroutine runs on the real clock; shared actors run once. */
 #include "mm6_coop.h"
 #include "mm6_proto.h"
+#include "mm6_charge.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
 #include "mod_function_hooks.h"
@@ -55,6 +56,16 @@ int mm6_coop_read(int seat,int a){
     if(seat<0 || seat>1 || a<0 || a>=2048)return 0;
     return C.initialized && seat!=C.owner?personal(&C.player[seat],a):R(a);
 }
+void mm6_coop_colors(int seat,const uint8_t colors[8]){
+    if(!C.initialized || seat<0 || seat>1)return;
+    int changed=0;
+    for(int i=0;i<8;i++){
+        if(mm6_coop_read(seat,0x370+i)!=colors[i])changed=1;
+        put(&C.player[seat],0x370+i,colors[i]);
+        if(C.owner==seat)P(0x370+i,colors[i]);
+    }
+    if(changed && C.owner==seat)P(0x46,R(0x46)+1);
+}
 static void input_for(int seat){
     static const uint8_t horizontal[]={0,1,2,2};
     P(0x40,C.raw[seat]);P(0x42,C.pending[seat]);
@@ -84,6 +95,7 @@ static int begin(uint16_t address){
 static int actor_end(uint16_t address){
     (void)address;
     if(!s_on || !C.initialized || cyc_mod_isolated() || R(0x8F)!=0)return 0;
+    mm6_charge_actor_end();
     capture(&C.player[C.owner]);C.updates[C.owner]++;
     if(!C.guest_round){
         C.guest_round=1;C.owner=(uint8_t)(C.anchor^1);project(&C.player[C.owner]);input_for(C.owner);
@@ -190,9 +202,10 @@ void mm6_coop_draw(uint32_t *out,int width,int origin,const uint8_t *opaque,uint
         }
     }
 }
-void mm6_coop_power(void){memset(&C,0,sizeof C);addresses();}
+void mm6_coop_power(void){memset(&C,0,sizeof C);addresses();mm6_charge_power();}
 void mm6_coop_set(int enabled,int roster){
     s_on=enabled!=0;s_roster=roster!=0;C.initialized=C.eligible=C.owner=C.anchor=C.guest_round=0;
+    mm6_charge_set(s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.begin",s_on);nes_mod_set_function_hook_enabled("mm6.coop.actor-end",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.animation-stop",s_on);mm6_view_coop(s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.dying",s_on);nes_mod_set_function_hook_enabled("mm6.coop.pit",s_on);
@@ -213,6 +226,7 @@ static int valid(const uint8_t *in,int len){
 }
 static int set(const uint8_t *in,int len){if(!valid(in,len))return 0;if(len)memcpy(&C,in,sizeof C);else memset(&C,0,sizeof C);return 1;}
 void mm6_coop_register(void){
+    mm6_charge_register();
     addresses();nes_mod_register_function_entry_plugin("mm6.coop.begin",0xE41C,begin);nes_mod_register_function_entry_plugin("mm6.coop.actor-end",0xE47A,actor_end);
     nes_mod_register_function_entry_plugin("mm6.coop.animation-stop",0xE24B,animation_stop);
     nes_mod_register_function_entry_plugin("mm6.coop.dying",0x8E62,dying);

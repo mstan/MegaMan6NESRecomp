@@ -164,3 +164,9 @@ id = "mm6.coop.death-music"
 addr = 0xED40
 length = 8
 crc32 = 0x78A4057B
+
+[[mod_function_hook]]
+id = "mm6.coop.charge-start"
+addr = 0xC5C7
+length = 8
+crc32 = 0x4251A7A0

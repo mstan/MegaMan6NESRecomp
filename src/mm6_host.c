@@ -1,6 +1,7 @@
 /* Native MM6 equipment, palette and CHR-RAM descriptors remain authoritative. */
 #include "mm6_proto.h"
 #include "mm6_coop.h"
+#include "mm6_charge.h"
 #include "cyc_host_extras.h"
 #include "cyc_input.h"
 #include "cyc_mod.h"
@@ -27,6 +28,7 @@ static unsigned prg(unsigned bank,unsigned address) {
     size_t at=(size_t)bank*8192+(address&8191);
     return at<s_size?s_cart[at]:255;
 }
+unsigned mm6_controls_prg(unsigned bank,unsigned address){return prg(bank,address);}
 static int graphics(unsigned id,int commit,uint8_t *decoded) {
     /* C95C: count in 16-byte units, destination in 16-byte units, a 9-bit
      * source offset in 16-byte units, and the physical source PRG bank. */
@@ -71,6 +73,12 @@ int mm6_controls_read_graphics(uint8_t out[2048]) {
     if(!s_cart || !out || form>2 || weapon>9)return 0;
     unsigned base=prg(0x38,0x96C7+form),extra=prg(0x3F,0xF708+weapon);
     return graphics(base,0,out) && (!weapon || graphics(extra,0,out));
+}
+int mm6_controls_palette_colors(int seat,int id,uint8_t out[8]){
+    uint8_t colors[32];for(int i=0;i<32;i++)colors[i]=R(0x360+i);
+    for(int i=0;i<8;i++)colors[16+i]=(uint8_t)mm6_coop_read(seat,0x370+i);
+    if(!s_cart || id<0 || id>255 || !palette((unsigned)id,colors))return 0;
+    memcpy(out,colors+16,8);return 1;
 }
 static int safe_for(int seat) {
     /* Native Start is evaluated here only in the live player loop. The
@@ -138,7 +146,7 @@ static void power(void *ctx) {
     }
 }
 static void end(void *ctx) {
-    (void)ctx;if(!safe())S.pending=0;mm6_proto_end();mm6_coop_end();
+    (void)ctx;if(!safe())S.pending=0;mm6_proto_end();mm6_coop_end();mm6_charge_end();
     char fields[512],coop[512];mm6_proto_json(fields,sizeof fields);mm6_coop_json(coop,sizeof coop);
     if(s_log)fprintf(s_log,"{\"frame\":%u,\"weapon\":%u,\"form\":%u,\"terrain\":%u,\"pose_kind\":%u,\"hurt\":%u,\"hp\":%u,\"charge\":%u,\"held\":%u,\"changes\":%llu,%s,%s}\n",
         cyc_ring_frame,R(0x699),R(0x9b),R(0xa7),R(0x94),S.hurt,R(0x3e5),R(0x9e),S.previous,(unsigned long long)S.changes,fields,coop);

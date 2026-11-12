@@ -73,7 +73,13 @@ static void sprite(uint32_t *out,int W,int origin,int slot,const uint8_t *oam) {
             int px=o[3]+x,bit=(o[2]&64)?x:7-x,v=((lo>>bit)&1)|(((hi>>bit)&1)<<1);
             if(!v || origin+px>=W || (px<8 && !(cyc_render_line_mask(py)&4)))continue;
             int at=py*W+origin+px;if(s_claimed[at])continue;s_claimed[at]=1;
-            if(!(o[2]&32) || !s_opaque[at])out[at]=cyc_render_color(16+(o[2]&3)*4+v);
+            if(!(o[2]&32) || !s_opaque[at]){
+                int palette=o[2]&3;
+                if(s_coop && s_frame.valid && s_frame.owners[slot]<8 && palette<2){
+                    int c=(int)s_frame.body.palette[palette*4+v]-(int)cyc_mod_peek(0x48);
+                    out[at]=cyc_render_color_value(c<0?15:c&63);
+                }else out[at]=cyc_render_color(16+palette*4+v);
+            }
         }
     }
 }

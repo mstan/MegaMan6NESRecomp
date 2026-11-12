@@ -15,4 +15,5 @@ int mm6_coop_ready(void);
 int mm6_coop_seat(void);
 int mm6_coop_character(void);
 int mm6_coop_read(int seat,int address);
+void mm6_coop_colors(int seat,const uint8_t colors[8]);
 int mm6_coop_json(char *out,int cap);
