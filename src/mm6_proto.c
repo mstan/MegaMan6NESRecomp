@@ -151,12 +151,13 @@ void mm6_proto_body(Mm6ProtoBody *b) {
     else if(kind==2)b->pose=(uint8_t)((firing?CYC_PROTO_FIRE_RUN0:CYC_PROTO_RUN0)+run[phase]);
     else if(kind==1)b->pose=(uint8_t)(CYC_PROTO_STEP0+(phase&1));
     else b->pose=(uint8_t)(firing?CYC_PROTO_FIRE_IDLE0:CYC_PROTO_IDLE0+((cyc_ring_frame>>3)&3));
-    /* Adapter geometry and unknown entry/effect animations remain native
-     * until their dedicated visual qualification. */
+    /* Adapter armor and animation remain native. The compositor replaces
+     * only the helmet/scarf; unknown base entry/effect poses stay native. */
     if(!S.teleport) {
         int a=S.native_animation;
         int known=a<=4 || a==7 || a==8 || a==10 || a==12 || a==14 || a==15 || a==24;
-        if(b->form || !known)b->active=0;
+        if(b->form)b->active=(uint8_t)(b->active?2:0);
+        else if(!known)b->active=0;
     }
 }
 void mm6_proto_power(void) {memset(s_players,0,sizeof s_players);for(int i=0;i<2;i++){s_players[i].selected=(uint8_t)s_start;s_players[i].native_animation=255;}mm6_view_power();}

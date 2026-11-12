@@ -57,7 +57,7 @@ Select swaps characters using a 32-frame teleport. Proto Man retains the native 
 
 Airborne firing shares the open-jump helmet and boot baseline. The native Buster starts at the matching cannon height in both directions, with ground and ladder origins retained.
 
-Native actor ownership identifies the body OAM parts; the compositor replaces those parts with the credited immutable sprite atlas. Native entry/effect animations and adapter forms currently retain their original artwork. Proto-themed Jet/Power forms, complete pose and projectile coverage, inventory portraits and launcher activation remain unfinished.
+Native actor ownership identifies the body OAM parts; the compositor replaces those parts with the credited immutable sprite atlas. Native entry/effect animations retain their original artwork. Jet and Power adapters keep the original animated armor, wings, punches and exhaust, with Proto Man's credited helmet, visor and scarf replacing the native head. Fuel, attacks, movement and adapter restrictions continue through the original game routines. Inventory portraits, complete pose/projectile coverage and launcher activation remain unfinished.
 
 The initial gallery matches native/interpreter execution for 4,800 frames in both modes. Mid-swap and mid-recoil loads reproduce memory and presentation; actual contact deals 6 damage with Proto Man traits and 3 in reskin mode with the same recoil. A real native pellet reflects into a native Buster shot, which damages an enemy while a special weapon is selected. Rear, grounded, firing and reskin cases retain native damage. Mid-reflection continuation matches the uninterrupted picture, memory and PCM. These are targeted checks, not complete game acceptance.
 
@@ -82,7 +82,7 @@ Either controller can navigate the boot screens and accept Game Over. After sele
 
 Charge flashes belong to each character. Pausing freezes both effects; releasing a shot or changing equipment clears only that player's effect. A charged survivor retains the charge and its artwork after the partner dies. The small palette sequence reads the native cartridge's own packets; Buster movement, damage and allocation remain native.
 
-Both players have health and equipment meters in MM2's stacked co-op layout, with Proto Man's health tint and a separate boss meter. The native meter routine supplies the original glyphs and amounts; completed packets latch with the displayed frame and survive current-build loads. Native personal menus keep their original picture. Jet fuel also receives its original passive recharge for the non-anchor player, with actual flight/recovery matching the original player's fuel trajectory.
+Both players have health and equipment meters in MM2's stacked co-op layout, with Proto Man's health tint and a separate boss meter. The native meter routine supplies the original glyphs and amounts; completed packets latch with the displayed frame and survive current-build loads. Native personal menus keep their original picture. Jet fuel also receives its original passive recharge for the non-anchor player, with actual flight/recovery matching the original player's fuel trajectory. The adapter visuals work for either seat, in solo play and with either sprite-limit setting. Native hardware state, sprite packets and audio remain unchanged; picture differences are confined to the helmet and scarf. Targeted checks cover real inventory selection, flight, Power attacks, both directions and the first picture/audio after a current-build load.
 
 The optional, default-on **No sprite flicker** display package captures complete native sprite packets in the game's original priority. It draws parts beyond the hardware scanline and 64-part OAM limits without changing the native OAM, gameplay or audio. This keeps a surviving player visible during dense death effects. `--no-flicker off` restores the original hardware limits. The native inventory and other global screens retain their original rendering.
 
@@ -99,4 +99,11 @@ python tools/qa_route.py tests/routes/coop-life-reverse.route --frames 5600 --ex
 python tools/qa_route.py tests/routes/coop-charge.route --frames 4600 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-charge --extra=--coop --extra=on
 python tools/qa_route.py tests/routes/coop-charge-handoff.route --frames 4700 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/sprite-overflow --extra=--coop --extra=on --extra=--coop-roster --extra=protoman-megaman --extra=--no-flicker --extra=on
 python tools/qa_route.py tests/routes/coop-gameover.route --frames 7400 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/game-over --extra=--coop --extra=on
+```
+
+The adapter routes grant the native acquisition prerequisites, select each form through the original inventory, and exercise native movement and attacks:
+
+```text
+python tools/qa_route.py tests/routes/proto-adapter-jet.route --frames 5600 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/adapter-jet --extra=--protoman --extra=on --extra=--no-flicker --extra=off
+python tools/qa_route.py tests/routes/proto-adapter-power.route --frames 5600 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/adapter-power --extra=--protoman --extra=on --extra=--no-flicker --extra=off
 ```

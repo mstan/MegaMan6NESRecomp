@@ -15,7 +15,7 @@
 #include <string.h>
 typedef struct {char magic[4];uint8_t valid,owner,owners[64];Mm6ProtoBody body;} ViewFrame;
 static ViewFrame s_build,s_frame;
-static int s_enabled,s_coop,s_no_flicker,s_wide;
+static int s_enabled,s_coop,s_no_flicker,s_wide,s_adapter_drawn;
 static uint32_t s_bg[256*240];
 static uint8_t s_opaque[864*240],s_claimed[864*240],s_allowed[64][240];
 static int begin(uint16_t address) {
@@ -70,8 +70,32 @@ static void body(uint32_t *out,int W,int origin,const Mm6ProtoBody *b) {
     }
 }
 void mm6_view_draw_character(uint32_t *out,int width,int origin,const Mm6ProtoBody *b){body(out,width,origin,b);}
+int mm6_view_adapter_head_mask(const Mm6ProtoBody *b,int x,int y) {
+    if(b->active!=2)return 0;
+    int dx=x-b->x,dy=b->flipped?b->y-y:y-b->y-1;
+    if(b->right)dx=-dx-1;
+    return dx>=-8 && dx<=8 && dy>=-13 && dy<=-1;
+}
+void mm6_view_draw_adapter_head(uint32_t *out,int W,int origin,const Mm6ProtoBody *b) {
+    const CycProtoAtlas *atlas=mm6_proto_atlas();if(!atlas || b->active!=2)return;
+    const CycProtoPose *p=&atlas->poses[CYC_PROTO_IDLE0];
+    /* The credited idle's helmet, visor and scarf share the native adapter's
+     * body anchor. Its lower body is deliberately excluded. Wings, shoulder
+     * armor, punches, exhaust and their animation remain native packets. */
+    for(int y=8;y<20;y++)for(int x=0;x<p->width;x++) {
+        int index=p->pixels[y*32+x];if(!index)continue;
+        int dx=x-p->origin_x,dy=y+p->top_y;
+        int px=origin+b->x+(b->right?-dx-1:dx),py=b->y+(b->flipped?-dy:dy+1);
+        if(px<0 || px>=W || py<0 || py>=240 || !(cyc_render_line_mask(py)&16) ||
+            (px<8 && !(cyc_render_line_mask(py)&4)))continue;
+        int at=py*W+px;if(s_claimed[at])continue;s_claimed[at]=1;
+        if(!b->behind || !s_opaque[at])out[at]=color(index,b);
+    }
+}
 static void sprite(uint32_t *out,int W,int origin,int slot,const uint8_t *oam) {
     const uint8_t *o=oam+slot*4;
+    int adapter=s_frame.owners[slot]==0 && s_frame.body.active==2;
+    if(adapter && !s_adapter_drawn){mm6_view_draw_adapter_head(out,W,origin,&s_frame.body);s_adapter_drawn=1;}
     int top=o[0]+1,height=cyc_render_line_sprite16(top<240?top:239)?16:8;
     for(int y=0;y<height;y++) {
             int py=top+y;if(py>=240 || (!s_no_flicker && !s_allowed[slot][py]) || !(cyc_render_line_mask(py)&16))continue;
@@ -82,6 +106,7 @@ static void sprite(uint32_t *out,int W,int origin,int slot,const uint8_t *oam) {
         for(int x=0;x<8;x++) {
             int px=o[3]+x,bit=(o[2]&64)?x:7-x,v=((lo>>bit)&1)|(((hi>>bit)&1)<<1);
             if(!v || origin+px>=W || (origin+px<8 && !(cyc_render_line_mask(py)&4)))continue;
+            if(adapter && mm6_view_adapter_head_mask(&s_frame.body,px,py))continue;
             int at=py*W+origin+px;if(s_claimed[at])continue;s_claimed[at]=1;
             if(!(o[2]&32) || !s_opaque[at]){
                 int palette=o[2]&3;
@@ -96,11 +121,13 @@ static void sprite(uint32_t *out,int W,int origin,int slot,const uint8_t *oam) {
 static int render(uint32_t *out,int W,int H,int native_x0,const uint32_t *native,void *ctx) {
     (void)ctx;(void)native_x0;(void)native;
     if(cyc_mod_peek(0x3a0)!=4 || (cyc_mod_peek(0x3b7)&2))return 0;
-    int replace=s_enabled && s_frame.valid && s_frame.body.active;
-    if((!replace && !mm6_coop_has_frame() && !(s_no_flicker && mm6_sprites_ready()) && !s_wide) || W<256 || W>864 || H!=240 || !cyc_render_background(s_bg))return 0;
+    int replace=s_enabled && s_frame.valid && s_frame.body.active==1;
+    int adapter=s_enabled && s_frame.valid && s_frame.body.active==2;
+    if((!replace && !adapter && !mm6_coop_has_frame() && !(s_no_flicker && mm6_sprites_ready()) && !s_wide) || W<256 || W>864 || H!=240 || !cyc_render_background(s_bg))return 0;
     mm6_world_audit(s_bg);
     int origin=(W-256)/2;
     memset(s_opaque,0,sizeof s_opaque);memset(s_claimed,0,(size_t)W*H);
+    s_adapter_drawn=0;
     for(int i=0;i<W*H;i++)out[i]=0xff000000u;
     const uint8_t *opaque=cyc_frame_bg_opaque();
     for(int y=0;y<H;y++) {
@@ -169,7 +196,7 @@ static int valid(const uint8_t *in,int len) {
     for(int i=0;i<2;i++) {
         if(memcmp(p[i].magic,"M6V1",4) || p[i].valid>1 || (p[i].owner>22 && p[i].owner!=255))return 0;
         const Mm6ProtoBody *b=&p[i].body;
-        if(b->pose>=CYC_PROTO_POSE_COUNT || b->active>1 || b->right>1 || b->flipped>1 || b->behind>1 || b->form>2)return 0;
+        if(b->pose>=CYC_PROTO_POSE_COUNT || b->active>2 || b->right>1 || b->flipped>1 || b->behind>1 || b->form>2 || (b->active==2 && !b->form))return 0;
         for(int j=0;j<64;j++)if(p[i].owners[j]>22 && p[i].owners[j]!=255)return 0;
     }
     return 1;

@@ -1,0 +1,13 @@
+# Native acquisition prerequisites; original inventory, transformation and movement run normally.
+INCLUDE proto-fixture.route
+4100 POKE 0695 03
+4200 START
+4201 -
+4300 RIGHT
+4301 -
+4400 START
+4401 -
+5000 A
+5200 -
+5400 B
+5440 -

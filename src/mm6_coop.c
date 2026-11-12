@@ -204,10 +204,12 @@ void mm6_coop_draw(uint32_t *out,int width,int origin,const uint8_t *opaque,uint
     if(!mm6_coop_has_frame())return;int body=0;
     for(int i=0;i<C.frame.count;i++){
         const Part *p=&C.frame.parts[i];
-        if(!p->owner && C.frame.body.active){if(!body){mm6_view_draw_character(out,width,origin,&C.frame.body);body=1;}continue;}
+        if(!p->owner && C.frame.body.active==1){if(!body){mm6_view_draw_character(out,width,origin,&C.frame.body);body=1;}continue;}
+        if(!p->owner && C.frame.body.active==2 && !body){mm6_view_draw_adapter_head(out,width,origin,&C.frame.body);body=1;}
         for(int y=0;y<8;y++)for(int x=0;x<8;x++){
             int value=p->pixels[y*8+x],px=p->x-C.frame.camera+origin+x,py=p->y+y;
             if(!value || px<0 || px>=width || py<0 || py>=240)continue;
+            if(!p->owner && mm6_view_adapter_head_mask(&C.frame.body,px-origin,py))continue;
             int at=py*width+px;if(claimed[at])continue;claimed[at]=1;
             if(!(p->attr&32) || !opaque[at])out[at]=cyc_render_color_value(p->colors[value]);
         }
@@ -230,7 +232,7 @@ static int valid(const uint8_t *in,int len){
     if(memcmp(p.magic,"M6C4",4) || p.enabled!=s_on || p.roster!=s_roster || p.initialized>1 || p.eligible>1 || p.owner>1 || p.anchor>1 || p.guest_round>1 || p.dead[0]>2 || p.dead[1]>2 || p.retry>2 || (p.initialized && p.owner!=(p.anchor^p.guest_round)))return 0;
     const Picture *pictures[2]={&p.build,&p.frame};
     for(int k=0;k<2;k++){
-        const Picture *q=pictures[k];if(q->valid>1 || q->seat>1 || q->count>PART_CAP || q->body.pose>=CYC_PROTO_POSE_COUNT || q->body.active>1 || q->body.form>2)return 0;
+        const Picture *q=pictures[k];if(q->valid>1 || q->seat>1 || q->count>PART_CAP || q->body.pose>=CYC_PROTO_POSE_COUNT || q->body.active>2 || q->body.form>2 || (q->body.active==2 && !q->body.form))return 0;
         for(int j=0;j<q->count;j++){const Part *part=&q->parts[j];if(part->owner>7)return 0;for(int n=0;n<4;n++)if(part->colors[n]>63)return 0;for(int n=0;n<64;n++)if(part->pixels[n]>3)return 0;}
     }
     return 1;
