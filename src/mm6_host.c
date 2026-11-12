@@ -165,6 +165,10 @@ static bool option(void *ctx,const char *name,const char *value) {
         mm6_coop_set(s_coop,s_roster);mm6_controls_refresh();return true;
     }
     if(!strcmp(name,"--mm6-controls-log")){if(s_log)fclose(s_log);s_log=fopen(value,"w");return s_log!=NULL;}
+    if(!strcmp(name,"--no-flicker")){
+        if(strcmp(value,"on") && strcmp(value,"off"))return false;
+        mm6_view_no_flicker(!strcmp(value,"on"));return true;
+    }
     if(!strcmp(name,"--protoman")) {
         if(strcmp(value,"on") && strcmp(value,"off"))return false;
         s_proto_on=!strcmp(value,"on");return mm6_proto_set(s_proto_on || s_coop,s_proto_mode,s_proto_start);
@@ -190,8 +194,9 @@ static int valid(const uint8_t *in,int len) {
     return 1;
 }
 static int set(const uint8_t *in,int len) {if(!valid(in,len))return 0;if(len)memcpy(s_players,in,sizeof s_players);else memset(s_players,0,sizeof s_players);return 1;}
-static void reset(void){enabled(0);s_coop=0;mm6_coop_set(0,s_roster);s_proto_on=0;mm6_proto_set(0,s_proto_mode,s_proto_start);}
+static void reset(void){enabled(0);s_coop=0;mm6_coop_set(0,s_roster);s_proto_on=0;mm6_proto_set(0,s_proto_mode,s_proto_start);mm6_view_no_flicker(0);}
 static void activate(void){enabled(1);}
+static void no_flicker(void){mm6_view_no_flicker(1);}
 NES_MOD_CONSTRUCTOR(register_mm6_controls) {
     mm6_proto_register();
     mm6_coop_register();
@@ -201,6 +206,7 @@ NES_MOD_CONSTRUCTOR(register_mm6_controls) {
     nes_mod_register_function_entry_plugin("mm6.controls.arrival",0x802d,hurt_end);
     nes_mod_register_savestate_hook("mm6.controls",get,set);nes_mod_register_savestate_validator("mm6.controls",valid);
     nes_mod_register_reset_callback(reset);nes_mod_register_activation_plugin("mega-man-6-usa.weapons",activate);
+    nes_mod_register_activation_plugin("mega-man-6-usa.noflicker",no_flicker);
 }
 const CycHostExtras *cyc_host_extras(void) {
     static const CycInputProfile profile={.id="megaman-weapons-1",.game_label={"Previous weapon (L)","Next weapon (R)"},
@@ -211,8 +217,9 @@ const CycHostExtras *cyc_host_extras(void) {
         {"--proto-mode",true,"protoman|megaman: character traits or reskin"},
         {"--proto-start",true,"protoman|megaman: starting character"},
         {"--coop",true,"on|off: development native coroutine controls prototype"},
-        {"--coop-roster",true,"megaman-protoman|protoman-megaman: development roster"}};
+        {"--coop-roster",true,"megaman-protoman|protoman-megaman: development roster"},
+        {"--no-flicker",true,"on|off: complete native sprite presentation"}};
     static const CycHostExtras extras={.power_on=power,.input=input,.frame_end=end,.option=option,
-        .options=options,.option_count=7,.input_profile=&profile};
+        .options=options,.option_count=8,.input_profile=&profile};
     return &extras;
 }

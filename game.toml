@@ -170,3 +170,15 @@ id = "mm6.coop.charge-start"
 addr = 0xC5C7
 length = 8
 crc32 = 0x4251A7A0
+
+[[mod_function_hook]]
+id = "mm6.view.complete"
+addr = 0xE27A
+length = 8
+crc32 = 0x2C864330
+
+[[mod_function_hook]]
+id = "mm6.view.complete-full"
+addr = 0xE283
+length = 8
+crc32 = 0x5B8B7308

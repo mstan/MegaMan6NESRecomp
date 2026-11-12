@@ -24,6 +24,7 @@ void mm6_view_enable(int enabled);
 void mm6_view_power(void);
 void mm6_view_register(void);
 void mm6_view_coop(int enabled);
+void mm6_view_no_flicker(int enabled);
 void mm6_view_draw_character(uint32_t *out,int width,int origin,const Mm6ProtoBody *body);
 int mm6_controls_hurt(void);
 void mm6_controls_refresh(void);
