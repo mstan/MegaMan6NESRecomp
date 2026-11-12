@@ -380,3 +380,9 @@ id = "mm6.coop.new-game-inventory"
 addr = 0xCD32
 length = 8
 crc32 = 0x882D6F82
+
+[[mod_function_hook]]
+id = "mm6.coop.source-loaded"
+addr = 0xDC5A
+length = 8
+crc32 = 0x4D43BAAD
