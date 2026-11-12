@@ -1,0 +1,3 @@
+# Distinct native personal health/ammo, real shots and each native inventory.
+INCLUDE coop-weapons.route
+4095 POKE 03E5 14

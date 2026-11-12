@@ -1,0 +1,14 @@
+# Unlock prerequisite only. Native menu, transformation, flight and fuel own outcomes.
+INCLUDE proto-fixture.route
+4100 POKE 0695 03
+4200 2:START
+4201 2:-
+4300 2:RIGHT
+4301 2:-
+4400 2:START
+4401 2:-
+4999 SAVESTATE guest_jet_ready
+5000 2:A
+5050 SAVESTATE guest_jet_flight
+5200 2:-
+5499 SAVESTATE guest_jet_recovered

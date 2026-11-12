@@ -29,6 +29,7 @@ int mm6_coop_enabled(void){return s_on;}
 int mm6_coop_ready(void){return s_on && C.initialized;}
 int mm6_coop_seat(void){return s_on?C.owner:0;}
 int mm6_coop_character(void){return s_on?(s_roster^C.owner):-1;}
+int mm6_coop_character_for(int seat){return s_on && seat>=0 && seat<2?(s_roster^seat):0;}
 static void addresses(void){
     if(s_count)return;
     /* Native Buster1..3, Beat4, hurt effect5 and friendly ricochets6/7.
@@ -167,6 +168,9 @@ void mm6_coop_build(void){
     int previous=C.owner,seat=C.anchor^1;C.owner=(uint8_t)seat;project(&C.player[seat]);
     uint8_t patterns[2048];
     int camera=(R(0x57)<<8)|R(0x56),ok=mm6_controls_read_graphics(patterns),shown=0;C.build.camera=(uint16_t)camera;C.build.seat=(uint8_t)seat;
+    /* CF4A also owns the native passive Jet-fuel recharge. The anchor runs
+     * it in D1D4; the other seat needs that same once-per-draw operation. */
+    P(0x8C,0);CycModRegs hud;cyc_mod_regs(&hud);if(ok)ok=cyc_mod_call(0xCF4A,&hud);
     cyc_mod_allow_isolated_hooks(true);
     for(int slot=0;slot<8 && ok;slot++){
         if(!R(0x3A0+slot) || (R(0x3B7+slot)&2))continue;

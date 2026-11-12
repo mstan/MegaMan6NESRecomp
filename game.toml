@@ -212,3 +212,9 @@ id = "mm6.wide.reset"
 addr = 0x8032
 length = 8
 crc32 = 0xD2CCBEBB
+
+[[mod_function_hook]]
+id = "mm6.view.hud"
+addr = 0xD1F2
+length = 8
+crc32 = 0xA6468233

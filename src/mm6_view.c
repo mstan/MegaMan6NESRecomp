@@ -4,6 +4,7 @@
 #include "mm6_sprites.h"
 #include "mm6_world.h"
 #include "mm6_wide.h"
+#include "mm6_hud.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
 #include "cyc_video.h"
@@ -35,7 +36,8 @@ static int part(uint16_t address) {
     CycModRegs r;cyc_mod_regs(&r);s_build.owners[((r.x+252)&255)/4]=s_build.owner;
     return 0;
 }
-static int dma(uint16_t address) {(void)address;if(!cyc_mod_isolated()){s_frame=s_build;mm6_coop_latch();mm6_sprites_latch();}return 0;}
+static int dma(uint16_t address) {(void)address;if(!cyc_mod_isolated()){s_frame=s_build;mm6_coop_latch();mm6_sprites_latch();mm6_hud_latch();}return 0;}
+static int hud(uint16_t address){(void)address;if(!cyc_mod_isolated())mm6_hud_capture();return 0;}
 static int complete(uint16_t address){
     (void)address;if(!cyc_mod_isolated() && mm6_sprites_capture()){mm6_proto_body(&s_build.body);s_build.valid=1;}return 0;
 }
@@ -116,28 +118,30 @@ static int render(uint32_t *out,int W,int H,int native_x0,const uint32_t *native
     if((s_no_flicker || s_wide) && mm6_sprites_ready()){
         uint8_t hud_lines[240]={0};int hud_parts=0;
         for(int slot=0;slot<64;slot++)if(s_frame.owners[slot]==255){
-            sprite(out,W,origin,slot,oam);
+            if(!mm6_hud_native_part(oam+slot*4))sprite(out,W,origin,slot,oam);
             int top=oam[slot*4]+1,height=cyc_render_line_sprite16(top<240?top:239)?16:8;
             if(top<240){hud_parts++;for(int y=top;y<top+height && y<240;y++)hud_lines[y]++;}
         }
         mm6_sprites_draw(out,W,origin,&s_frame.body,replace,s_opaque,s_claimed,!s_no_flicker,hud_lines,hud_parts);
     }else for(int slot=0;slot<64;slot++) {
         if(replace && s_frame.owners[slot]==0){if(slot==first)body(out,W,origin,&s_frame.body);}
-        else sprite(out,W,origin,slot,oam);
+        else if(!mm6_hud_native_part(oam+slot*4))sprite(out,W,origin,slot,oam);
     }
     if(first==64 && mm6_proto_swapping())body(out,W,origin,&s_frame.body);
     mm6_coop_draw(out,W,origin,s_opaque,s_claimed);
+    mm6_hud_draw(out,W,H,-1);
     cyc_render_set_native_origin(origin);return 1;
 }
 void mm6_view_power(void) {
     mm6_sprites_power();
+    mm6_hud_power();
     memset(&s_build,0,sizeof s_build);memset(&s_frame,0,sizeof s_frame);
     memset(s_build.owners,255,sizeof s_build.owners);memset(s_frame.owners,255,sizeof s_frame.owners);
     s_build.owner=s_frame.owner=255;
 }
 static void refresh(void) {
     int active=s_enabled || s_coop || s_no_flicker || s_wide;mm6_sprites_active(active);
-    static const char *const ids[]={"begin","frame","actor","part0","part1","part2","part3","dma","animation","animation-update","complete","complete-full"};
+    static const char *const ids[]={"begin","frame","actor","part0","part1","part2","part3","dma","animation","animation-update","complete","complete-full","hud"};
     for(int i=0;i<sizeof ids/sizeof *ids;i++){char id[48];snprintf(id,sizeof id,"mm6.view.%s",ids[i]);nes_mod_set_function_hook_enabled(id,active);}
     cyc_render_set_compositor(active?render:NULL,NULL);cyc_render_set_stock_compositing(active);cyc_render_capture_background(active);
 }
@@ -173,6 +177,7 @@ static int valid(const uint8_t *in,int len) {
 static int set(const uint8_t *in,int len) {if(!valid(in,len))return 0;if(len){memcpy(&s_build,in,sizeof s_build);memcpy(&s_frame,in+sizeof s_build,sizeof s_frame);}else mm6_view_power();return 1;}
 void mm6_view_register(void) {
     mm6_sprites_register();
+    mm6_hud_register();
     nes_mod_register_function_entry_plugin("mm6.view.begin",0xe1dd,begin);
     nes_mod_register_function_entry_plugin("mm6.view.frame",0xd1d4,begin);
     nes_mod_register_function_entry_plugin("mm6.view.actor",0xe263,actor);
@@ -185,5 +190,6 @@ void mm6_view_register(void) {
     nes_mod_register_function_entry_plugin("mm6.view.animation-update",0xe55d,animation);
     nes_mod_register_function_entry_plugin("mm6.view.complete",0xe27a,complete);
     nes_mod_register_function_entry_plugin("mm6.view.complete-full",0xe283,complete);
+    nes_mod_register_function_entry_plugin("mm6.view.hud",0xd1f2,hud);
     nes_mod_register_savestate_hook("mm6.view",get,set);nes_mod_register_savestate_validator("mm6.view",valid);
 }
