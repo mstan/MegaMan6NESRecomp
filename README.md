@@ -55,6 +55,8 @@ MegaMan6Recomp.exe "/path/to/Mega Man 6 (USA).nes" --protoman on --proto-mode pr
 
 Select swaps characters using a 32-frame teleport. Proto Man retains the native charge and slide mechanisms, limits ordinary Buster shots to two, takes double native contact damage with normal recoil, and reflects the native small pellets (types 14/1A) while airborne and facing them without firing. `--proto-mode megaman` retains Mega Man's traits with Proto Man's artwork. `--proto-start megaman` starts as Mega Man.
 
+Airborne firing shares the open-jump helmet and boot baseline. The native Buster starts at the matching cannon height in both directions, with ground and ladder origins retained.
+
 Native actor ownership identifies the body OAM parts; the compositor replaces those parts with the credited immutable sprite atlas. Native entry/effect animations and adapter forms currently retain their original artwork. Proto-themed Jet/Power forms, complete pose and projectile coverage, inventory portraits and launcher activation remain unfinished.
 
 The initial gallery matches native/interpreter execution for 4,800 frames in both modes. Mid-swap and mid-recoil loads reproduce memory and presentation; actual contact deals 6 damage with Proto Man traits and 3 in reskin mode with the same recoil. A real native pellet reflects into a native Buster shot, which damages an enemy while a special weapon is selected. Rear, grounded, firing and reskin cases retain native damage. Mid-reflection continuation matches the uninterrupted picture, memory and PCM. These are targeted checks, not complete game acceptance.

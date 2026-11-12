@@ -85,7 +85,7 @@ static int muzzle(uint16_t address) {
         S.pending[slot-1]=S.muzzle[slot-1]=0;return 0;
     }
     if(S.muzzle[slot-1] && mm6_proto_selected() && !R(0x9b)) {
-        int kind=R(0x94),offset=kind==7?-5:(kind==4 || kind==5)?-4:3;
+        int kind=R(0x94),offset=(kind==4 || kind==5)?-4:3;
         int y=R(0x4cb+slot)+offset;
         if(y>=0 && y<240)P(0x4cb+slot,y);
     }
