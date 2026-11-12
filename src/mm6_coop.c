@@ -184,7 +184,9 @@ static int source_begin(void){
     r=original;r.s=(uint8_t)(original.s-4);r.y=(uint8_t)page;cyc_mod_set_regs(&r);return 1;
 }
 static int source_loaded(uint16_t address){
-    (void)address;if(!s_on || cyc_mod_isolated() || C.source_pending!=1)return 0;
+    /* This return belongs to the pending native call even if its package
+     * was disabled while the queue/NMI loader yielded. */
+    (void)address;if(cyc_mod_isolated() || C.source_pending!=1)return 0;
     C.source_pending=2;return 1;
 }
 static void follow_room(void){
@@ -319,11 +321,13 @@ static void initialize(void){
     C.dead[0]=C.dead[1]=C.retry=C.inventory_pending=0;
 }
 static int begin(uint16_t address){
-    (void)address;if(!s_on || cyc_mod_isolated())return 0;
+    (void)address;if(cyc_mod_isolated())return 0;
     if(C.source_pending==2){
         for(int i=0;i<4;i++)P(0x100|((C.source_regs.s-3+i)&255),C.source_stack[i]);
         cyc_mod_set_regs(&C.source_regs);C.source_pending=0;
+        if(!s_on)mm6_coop_set(0,s_roster);
     }
+    if(!s_on)return 0;
     if(!C.initialized && C.eligible && R(0x3A0)==4 && R(0x3E5)<28 && !R(0x94) && !(R(0x3B7)&2))initialize();
     if(!C.initialized)return 0;
     if(source_begin())return 1;
@@ -475,15 +479,18 @@ void mm6_coop_draw(uint32_t *out,int width,int origin,const uint8_t *opaque,uint
 }
 void mm6_coop_power(void){memset(&C,0,sizeof C);addresses();mm6_charge_power();}
 void mm6_coop_set(int enabled,int roster){
-    s_on=enabled!=0;s_roster=roster!=0;C.initialized=C.eligible=C.owner=C.anchor=C.guest_round=C.scene=C.inventory_pending=C.source_pending=0;
+    s_on=enabled!=0;s_roster=roster!=0;
+    /* Keep ownership of the injected return frame until both native RTSes
+     * complete. All ordinary co-op hooks may stop immediately. */
+    if(!C.source_pending)C.initialized=C.eligible=C.owner=C.anchor=C.guest_round=C.scene=C.inventory_pending=0;
     cyc_mod_set_ram_read_hook(s_on && s_view?personal_camera_read:NULL);
     mm6_charge_set(s_on);
-    nes_mod_set_function_hook_enabled("mm6.coop.begin",s_on);nes_mod_set_function_hook_enabled("mm6.coop.actor-end",s_on);
+    nes_mod_set_function_hook_enabled("mm6.coop.begin",s_on || C.source_pending);nes_mod_set_function_hook_enabled("mm6.coop.actor-end",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.animation-stop",s_on);mm6_view_coop(s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.dying",s_on);nes_mod_set_function_hook_enabled("mm6.coop.pit",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.retry",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.death-music",s_on);
-    nes_mod_set_function_hook_enabled("mm6.coop.source-loaded",s_on);
+    nes_mod_set_function_hook_enabled("mm6.coop.source-loaded",s_on || C.source_pending);
     static const char *hooks[]={"room-door","room-right","room-left","room-down-left","room-down-right","room-up-left","room-up-right","room-end-right","room-end-left","room-end-down-right","room-end-down-left","room-end-up-right","room-end-up-left","personal-camera","hit-normal","hit-piercing","hit-clear","hit-reflected","boss-lethal","robot-lethal","robot-jet-lethal","global-scene","stage-begin","ammo-refill","beat-refill","weapon-grant","new-game-inventory"};
     for(unsigned i=0;i<sizeof hooks/sizeof *hooks;i++){char id[80];snprintf(id,sizeof id,"mm6.coop.%s",hooks[i]);nes_mod_set_function_hook_enabled(id,s_on);}
     nes_mod_set_local_only("MM6 native co-op prototype (unqualified netplay)",s_on);
@@ -501,7 +508,12 @@ static int valid(const uint8_t *in,int len){
     }
     return 1;
 }
-static int set(const uint8_t *in,int len){if(!valid(in,len))return 0;if(len)memcpy(&C,in,sizeof C);else memset(&C,0,sizeof C);return 1;}
+static int set(const uint8_t *in,int len){
+    if(!valid(in,len))return 0;if(len)memcpy(&C,in,sizeof C);else memset(&C,0,sizeof C);
+    nes_mod_set_function_hook_enabled("mm6.coop.begin",s_on || C.source_pending);
+    nes_mod_set_function_hook_enabled("mm6.coop.source-loaded",s_on || C.source_pending);
+    return 1;
+}
 void mm6_coop_register(void){
     mm6_charge_register();
     addresses();nes_mod_register_function_entry_plugin("mm6.coop.begin",0xE41C,begin);nes_mod_register_function_entry_plugin("mm6.coop.actor-end",0xE47A,actor_end);
