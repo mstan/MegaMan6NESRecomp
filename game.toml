@@ -356,3 +356,27 @@ id = "mm6.coop.personal-camera"
 addr = 0x8C39
 length = 8
 crc32 = 0x63A727A9
+
+[[mod_function_hook]]
+id = "mm6.coop.ammo-refill"
+addr = 0xBA5D
+length = 8
+crc32 = 0xC6CBDDBD
+
+[[mod_function_hook]]
+id = "mm6.coop.beat-refill"
+addr = 0xBA75
+length = 8
+crc32 = 0xDCCF962C
+
+[[mod_function_hook]]
+id = "mm6.coop.weapon-grant"
+addr = 0xBE39
+length = 8
+crc32 = 0x149A53B7
+
+[[mod_function_hook]]
+id = "mm6.coop.new-game-inventory"
+addr = 0xCD32
+length = 8
+crc32 = 0x882D6F82

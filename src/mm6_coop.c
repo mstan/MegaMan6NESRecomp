@@ -27,6 +27,7 @@ typedef struct {
     uint8_t playing,scene,scene_stage,scene_page,scene_leader,damage_owner[23];
     uint64_t transitions[2],finishers[2];
     uint64_t room_checks;uint16_t room_address;uint8_t room_flags;
+    uint8_t inventory_pending,inventory_ammo[2][10];
     Picture build,frame;
 } Coop;
 static Coop C;
@@ -198,9 +199,26 @@ static int stage_begin(uint16_t address){
 static int global_scene(uint16_t address){
     (void)address;
     if(s_on && C.initialized && !cyc_mod_isolated()){
-        capture(&C.player[C.owner]);C.playing=C.initialized=C.eligible=C.guest_round=C.scene=0;
+        capture(&C.player[C.owner]);C.inventory_pending=(uint8_t)(R(0xF0)==1);
+        if(C.inventory_pending)for(int seat=0;seat<2;seat++)for(int i=0;i<10;i++)
+            C.inventory_ammo[seat][i]=(uint8_t)mm6_coop_read(seat,0x688+i);
+        C.playing=C.initialized=C.eligible=C.guest_round=C.scene=0;
         memset(&C.build,0,sizeof C.build);memset(&C.frame,0,sizeof C.frame);
     }
+    return 0;
+}
+static int global_ammo(uint16_t address){
+    if(!s_on || !C.inventory_pending || C.initialized || cyc_mod_isolated())return 0;
+    if(address==0xCD32){C.inventory_pending=0;return 0;}
+    if(R(0x4B)!=0x3B)return 0;
+    CycModRegs r={0};cyc_mod_regs(&r);
+    int weapon=address==0xBA75?9:address==0xBE39?r.y:r.x;
+    if(weapon<0 || weapon>=10)return 0;
+    /* Only actual retail grants/refills change both retained inventories.
+     * BA3F refills acquired weapons before the early stages, but deliberately
+     * skips stage9+. BE39 grants the demonstrated new weapon; neither the
+     * demo actor nor the next native body may clone one seat's spent ammo. */
+    for(int seat=0;seat<2;seat++)C.inventory_ammo[seat][weapon]=r.a;
     return 0;
 }
 static void initialize(void){
@@ -214,8 +232,11 @@ static void initialize(void){
     if(C.retry==2){
         for(int seat=0;seat<2;seat++)for(int i=0;i<10;i++)put(&C.player[seat],0x688+i,C.retry_ammo[seat][i]);
         project(&C.player[0]);
+    }else if(C.inventory_pending){
+        for(int seat=0;seat<2;seat++)for(int i=0;i<10;i++)put(&C.player[seat],0x688+i,C.inventory_ammo[seat][i]);
+        project(&C.player[0]);
     }
-    C.dead[0]=C.dead[1]=C.retry=0;
+    C.dead[0]=C.dead[1]=C.retry=C.inventory_pending=0;
 }
 static int begin(uint16_t address){
     (void)address;if(!s_on || cyc_mod_isolated())return 0;
@@ -369,22 +390,22 @@ void mm6_coop_draw(uint32_t *out,int width,int origin,const uint8_t *opaque,uint
 }
 void mm6_coop_power(void){memset(&C,0,sizeof C);addresses();mm6_charge_power();}
 void mm6_coop_set(int enabled,int roster){
-    s_on=enabled!=0;s_roster=roster!=0;C.initialized=C.eligible=C.owner=C.anchor=C.guest_round=0;
+    s_on=enabled!=0;s_roster=roster!=0;C.initialized=C.eligible=C.owner=C.anchor=C.guest_round=C.scene=C.inventory_pending=0;
     mm6_charge_set(s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.begin",s_on);nes_mod_set_function_hook_enabled("mm6.coop.actor-end",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.animation-stop",s_on);mm6_view_coop(s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.dying",s_on);nes_mod_set_function_hook_enabled("mm6.coop.pit",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.retry",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.death-music",s_on);
-    static const char *hooks[]={"room-door","room-right","room-left","room-down-left","room-down-right","room-up-left","room-up-right","room-end-right","room-end-left","room-end-down-right","room-end-down-left","room-end-up-right","room-end-up-left","personal-camera","hit-normal","hit-piercing","hit-clear","hit-reflected","boss-lethal","robot-lethal","robot-jet-lethal","global-scene","stage-begin"};
+    static const char *hooks[]={"room-door","room-right","room-left","room-down-left","room-down-right","room-up-left","room-up-right","room-end-right","room-end-left","room-end-down-right","room-end-down-left","room-end-up-right","room-end-up-left","personal-camera","hit-normal","hit-piercing","hit-clear","hit-reflected","boss-lethal","robot-lethal","robot-jet-lethal","global-scene","stage-begin","ammo-refill","beat-refill","weapon-grant","new-game-inventory"};
     for(unsigned i=0;i<sizeof hooks/sizeof *hooks;i++){char id[80];snprintf(id,sizeof id,"mm6.coop.%s",hooks[i]);nes_mod_set_function_hook_enabled(id,s_on);}
     nes_mod_set_local_only("MM6 native co-op prototype (unqualified netplay)",s_on);
     mm6_coop_view_set(s_view);
 }
-static int get(uint8_t *out,int cap){if(cap<sizeof C)return -1;memcpy(C.magic,"M6C5",4);C.enabled=(uint8_t)s_on;C.roster=(uint8_t)s_roster;memcpy(out,&C,sizeof C);return sizeof C;}
+static int get(uint8_t *out,int cap){if(cap<sizeof C)return -1;memcpy(C.magic,"M6C6",4);C.enabled=(uint8_t)s_on;C.roster=(uint8_t)s_roster;memcpy(out,&C,sizeof C);return sizeof C;}
 static int valid(const uint8_t *in,int len){
     if(!len)return !s_on;if(!in || len!=sizeof C)return 0;Coop p;memcpy(&p,in,sizeof p);
-    if(memcmp(p.magic,"M6C5",4) || p.enabled!=s_on || p.roster!=s_roster || p.initialized>1 || p.eligible>1 || p.owner>1 || p.anchor>1 || p.guest_round>1 || p.dead[0]>2 || p.dead[1]>2 || p.retry>2 || p.playing>1 || p.scene>3 || p.scene_leader>1 || (p.initialized && p.owner!=(p.anchor^p.guest_round)))return 0;
+    if(memcmp(p.magic,"M6C6",4) || p.enabled!=s_on || p.roster!=s_roster || p.initialized>1 || p.eligible>1 || p.owner>1 || p.anchor>1 || p.guest_round>1 || p.dead[0]>2 || p.dead[1]>2 || p.retry>2 || p.playing>1 || p.scene>3 || p.scene_leader>1 || p.inventory_pending>1 || (p.initialized && p.owner!=(p.anchor^p.guest_round)))return 0;
     for(int i=0;i<23;i++)if(p.damage_owner[i]>2)return 0;
     const Picture *pictures[2]={&p.build,&p.frame};
     for(int k=0;k<2;k++){
@@ -420,12 +441,16 @@ void mm6_coop_register(void){
     nes_mod_register_function_entry_plugin("mm6.coop.global-scene",0xCD67,global_scene);
     nes_mod_register_function_entry_plugin("mm6.coop.stage-begin",0xCDC3,stage_begin);
     nes_mod_register_function_entry_plugin("mm6.coop.personal-camera",0x8C39,personal_camera);
+    nes_mod_register_function_entry_plugin("mm6.coop.ammo-refill",0xBA5D,global_ammo);
+    nes_mod_register_function_entry_plugin("mm6.coop.beat-refill",0xBA75,global_ammo);
+    nes_mod_register_function_entry_plugin("mm6.coop.weapon-grant",0xBE39,global_ammo);
+    nes_mod_register_function_entry_plugin("mm6.coop.new-game-inventory",0xCD32,global_ammo);
     nes_mod_register_savestate_hook("mm6.coop",get,set);nes_mod_register_savestate_validator("mm6.coop",valid);
 }
 int mm6_coop_json(char *out,int cap){
-    return snprintf(out,cap,"\"coop\":{\"on\":%d,\"ready\":%u,\"owner\":%u,\"round\":%u,\"anchor\":%u,\"dead\":[%u,%u],\"retry\":%u,\"lives\":%u,\"world\":%llu,\"updates\":[%llu,%llu],\"scene\":%u,\"room_checks\":%llu,\"room_address\":%u,\"room_flags\":%u,\"transitions\":[%llu,%llu],\"finishers\":[%llu,%llu],\"pages\":[%d,%d],\"ammo1\":[%d,%d],\"players\":[[%d,%d,%d,%d,%d],[%d,%d,%d,%d,%d]]}",
+    return snprintf(out,cap,"\"coop\":{\"on\":%d,\"ready\":%u,\"owner\":%u,\"round\":%u,\"anchor\":%u,\"dead\":[%u,%u],\"retry\":%u,\"lives\":%u,\"world\":%llu,\"updates\":[%llu,%llu],\"scene\":%u,\"room_checks\":%llu,\"room_address\":%u,\"room_flags\":%u,\"inventory_pending\":%u,\"transitions\":[%llu,%llu],\"finishers\":[%llu,%llu],\"pages\":[%d,%d],\"ammo1\":[%d,%d],\"ammo7\":[%d,%d],\"players\":[[%d,%d,%d,%d,%d],[%d,%d,%d,%d,%d]]}",
         s_on,C.initialized,C.owner,C.guest_round,C.anchor,C.dead[0],C.dead[1],C.retry,R(0xA9),(unsigned long long)C.world,(unsigned long long)C.updates[0],(unsigned long long)C.updates[1],
-        C.scene,(unsigned long long)C.room_checks,C.room_address,C.room_flags,(unsigned long long)C.transitions[0],(unsigned long long)C.transitions[1],(unsigned long long)C.finishers[0],(unsigned long long)C.finishers[1],mm6_coop_read(0,0x46F),mm6_coop_read(1,0x46F),mm6_coop_read(0,0x689),mm6_coop_read(1,0x689),
+        C.scene,(unsigned long long)C.room_checks,C.room_address,C.room_flags,C.inventory_pending,(unsigned long long)C.transitions[0],(unsigned long long)C.transitions[1],(unsigned long long)C.finishers[0],(unsigned long long)C.finishers[1],mm6_coop_read(0,0x46F),mm6_coop_read(1,0x46F),mm6_coop_read(0,0x689),mm6_coop_read(1,0x689),mm6_coop_read(0,0x68F),mm6_coop_read(1,0x68F),
         mm6_coop_read(0,0x486),mm6_coop_read(0,0x4CB),mm6_coop_read(0,0x3E5),mm6_coop_read(0,0x94),mm6_coop_read(0,0x699),
         mm6_coop_read(1,0x486),mm6_coop_read(1,0x4CB),mm6_coop_read(1,0x3E5),mm6_coop_read(1,0x94),mm6_coop_read(1,0x699));
 }
