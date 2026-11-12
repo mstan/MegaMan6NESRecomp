@@ -11,7 +11,15 @@ cmake --build build --config Release --parallel 2
 
 Use `NESRECOMP_ROOT` and `NESRECOMP_RECOMP_UI` to select existing engine and launcher checkouts. Runtime tests use isolated configuration and explicit ROM paths.
 
-The feature branch currently contains qualified native gameplay and initial solo character slices. Co-op/netplay and adaptive world extensions are in progress. Native Mega Man 6 mechanics, including slide, charge and Rush adapters, remain the behavioral reference.
+The feature branch contains native gameplay, character and co-op development. Native Mega Man 6 mechanics, including slide, charge and Rush adapters, remain the behavioral reference. Full gameplay parity and release acceptance are still in progress.
+
+## Launcher selections and online sessions
+
+The launcher exposes Proto Man, co-op, adaptive widescreen and slowdown reduction alongside weapon switching and complete sprite presentation. Fit to screen, weapon switching, complete sprites and slowdown reduction are enabled in a fresh catalog. Proto Man and co-op are optional. Both characters retain native charge, slide and Rush adapter restrictions.
+
+The online session profile adopts the host's roster, character behavior, native abilities, weapon controls, sprite policy, CPU budget and camera class before gameplay starts. It also verifies the cartridge and embedded character artwork, including the adapter-head policy. Shared online play uses a fixed common logical canvas; the physical windows can have different sizes. Independent views retain native 256-pixel grids and allow local Split, Player one and Player two choices within that camera class. Runtime changes cannot switch the agreed camera class. Leaving a match restores the prior runtime settings, catalog preferences, command-line precedence and video geometry.
+
+Netplay is built by default. `MM6_NETPLAY_QUALIFIED` remains `OFF` while broader game integration is unfinished; qualification builds explicitly enable it. The representative Shared profile has an actual delayed-input PC/server native/interpreter check with matching canonical state, rollback and current-build continuation evidence. Separate-view UI changes have targeted checks; a complete moving online Split run is not claimed by this slice.
 
 A 5,220-frame route through stage selection, teleport, movement, camera scrolling, enemies and the inventory matches the interpreter at every frame. This is representative baseline evidence, not complete stage or enhancement acceptance.
 

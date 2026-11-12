@@ -3,6 +3,7 @@
 #include "mm6_world.h"
 #include "mm6_proto.h"
 #include "mm6_coop.h"
+#include "mm6_net.h"
 #include "cyc_mod.h"
 #include "cyc_video.h"
 #include "mod_function_hooks.h"
@@ -18,11 +19,11 @@ static int in_views(int x,int radius){
     return (x+radius>=left[0] && x-radius<left[0]+256) || (x+radius>=left[1] && x-radius<left[1]+256);
 }
 int mm6_wide_active(void){
-    int independent=mm6_coop_independent(),camera,left,lo,hi,width=independent?256:cyc_video_width();
+    int independent=mm6_coop_independent(),camera,left,lo,hi,width=independent?256:mm6_net_simulation_width(cyc_video_width());
     return (independent || (s_on && width>256)) && R(0x3A0)==4 && !(R(0x3B7)&2) && mm6_world_geometry(width,&camera,&left,&lo,&hi);
 }
 static int spawn(uint16_t address){
-    (void)address;int independent=mm6_coop_independent(),camera,left,lo,hi,width=independent?256:cyc_video_width();
+    (void)address;int independent=mm6_coop_independent(),camera,left,lo,hi,width=independent?256:mm6_net_simulation_width(cyc_video_width());
     if(!mm6_wide_active() || cyc_mod_isolated() || (independent && mm6_coop_scene_locked()) || !mm6_world_geometry(width,&camera,&left,&lo,&hi))return 0;
     for(int id=0;id<128;id++){
         Mm6WorldActor a;if(!mm6_world_actor(id,&a))break;
@@ -61,7 +62,7 @@ static int cull(uint16_t address){
     (void)address;if(!mm6_wide_active() || cyc_mod_isolated())return 0;
     int independent=mm6_coop_independent();
     CycModRegs r;cyc_mod_regs(&r);int slot=r.x;if((slot<1 && !independent) || slot>21 || R(0x4B4+slot) || R(0x4CB+slot)>=248)return 0;
-    int camera,left,lo,hi,width=independent?256:cyc_video_width(),x=(R(0x46F+slot)<<8)|R(0x486+slot);
+    int camera,left,lo,hi,width=independent?256:mm6_net_simulation_width(cyc_video_width()),x=(R(0x46F+slot)<<8)|R(0x486+slot);
     if(!mm6_world_geometry(width,&camera,&left,&lo,&hi) || x<lo || x>=hi ||
         (independent?!in_views(x,24):(x<left+4 || x>=left+width)))return 0;
     /* E485 has already performed the original coordinate calculations.

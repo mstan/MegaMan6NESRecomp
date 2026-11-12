@@ -3,6 +3,8 @@ project(MegaMan6Recomp C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(NESRECOMP_GAME_VERSION "0.1.0-development" CACHE STRING "Game release version")
+option(MM6_NETPLAY_QUALIFIED "Allow the qualified MM6 simulation profile online" OFF)
+option(MM6_ENABLE_NETPLAY "Build shared rollback netplay and lobby" ON)
 set(NESRECOMP_ROOT "${CMAKE_SOURCE_DIR}/nesrecomp" CACHE PATH "NESRecomp checkout")
 set(NESRECOMP_BACKEND "cycle" CACHE STRING "CPU backend")
 set(NESRECOMP_ROM "" CACHE FILEPATH "Original Mega Man 6 USA ROM")
@@ -30,9 +32,13 @@ include("${NESRECOMP_ROOT}/runner/cyc/project.cmake")
 nesrecomp_add_cycle_game(MegaMan6Recomp ROM "${NESRECOMP_ROM}"
     GAME_CONFIG "${CMAKE_SOURCE_DIR}/game.toml" SEED_FILE "${CMAKE_SOURCE_DIR}/cyc_seeds_usa.txt" GAME_ID "mega-man-6-usa"
     PLAYERS 2 REGION NTSC MODS GAME_ID "mega-man-6-usa"
-    HOST_EXTRAS "${CMAKE_SOURCE_DIR}/src/mm6_host.c" "${CMAKE_SOURCE_DIR}/src/mm6_proto.c"
+    HOST_EXTRAS "${CMAKE_SOURCE_DIR}/src/mm6_host.c" "${CMAKE_SOURCE_DIR}/src/mm6_net.c" "${CMAKE_SOURCE_DIR}/src/mm6_proto.c"
         "${CMAKE_SOURCE_DIR}/src/mm6_view.c" "${CMAKE_SOURCE_DIR}/src/mm6_coop.c" "${CMAKE_SOURCE_DIR}/src/mm6_charge.c" "${CMAKE_SOURCE_DIR}/src/mm6_sprites.c" "${CMAKE_SOURCE_DIR}/src/mm6_world.c" "${CMAKE_SOURCE_DIR}/src/mm6_wide.c" "${CMAKE_SOURCE_DIR}/src/mm6_hud.c"
         "${NESRECOMP_ROOT}/runner/cyc/cyc_protoman_atlas.c")
 target_include_directories(MegaMan6Recomp PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_BINARY_DIR}" "${NESRECOMP_ROOT}/runner/src")
+target_compile_definitions(MegaMan6Recomp PRIVATE MM6_NETPLAY_QUALIFIED=$<BOOL:${MM6_NETPLAY_QUALIFIED}>)
+if(MM6_ENABLE_NETPLAY OR NESRECOMP_ENABLE_NET)
+    nesrecomp_enable_recomp_net(MegaMan6Recomp)
+endif()
 add_custom_command(TARGET MegaMan6Recomp POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_SOURCE_DIR}/mods/preloaded" "$<TARGET_FILE_DIR:MegaMan6Recomp>/mods")

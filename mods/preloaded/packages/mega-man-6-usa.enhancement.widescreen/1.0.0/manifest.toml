@@ -1,0 +1,45 @@
+format_version = 1
+id = "mega-man-6-usa.enhancement.widescreen"
+version = "1.0.0"
+name = "Adaptive widescreen"
+author = "NESRecomp"
+description = "Extend connected horizontal rooms using the native terrain and actor tables. Scripted and vertical scenes retain native room behavior."
+license = "PolyForm-Noncommercial-1.0.0"
+resolver = "declarative"
+save_compatibility = "requires-same-mods"
+
+[[target]]
+game_id = "mega-man-6-usa"
+rom_crc32 = "988798a8"
+
+[[feature]]
+id = "widescreen"
+name = "Widescreen"
+group = "Display"
+default_enabled = true
+
+[[plugin]]
+feature = "widescreen"
+id = "mm6.widescreen"
+
+[[option]]
+feature = "widescreen"
+id = "aspect"
+label = "Aspect ratio"
+type = "choice"
+default = "fit"
+[[option.choice]]
+value = "fit"
+label = "Fit to screen"
+[[option.choice]]
+value = "stock"
+label = "Original"
+[[option.choice]]
+value = "16-9"
+label = "16:9"
+[[option.choice]]
+value = "21-9"
+label = "21:9"
+[[option.choice]]
+value = "32-9"
+label = "32:9"

@@ -2,6 +2,10 @@
 #include "mm6_proto.h"
 #include "mm6_coop.h"
 #include "mm6_proto_sheet.h"
+#include "mm6_net.h"
+#ifdef NESRECOMP_NET
+#include "nes_netplay_identity.h"
+#endif
 #include "cyc_mod.h"
 #include "cyc_ring.h"
 #include "mod_runtime.h"
@@ -24,6 +28,18 @@ static ProtoState s_players[2];
 #define S (s_players[mm6_coop_seat()])
 static CycProtoAtlas s_atlas;
 static int s_loaded,s_on,s_mode=1,s_start=1;
+int mm6_proto_source_hash(uint8_t out[32]) {
+#ifdef NESRECOMP_NET
+    /* Native adapter armor/wings are part of the separately hashed cartridge.
+     * Include the source art and exact cropped-head policy in this identity. */
+    static const char adapter[]="MM6 adapter head v1: IDLE0 rows8..19; mask dx[-8,8] dy[-13,-1]; native armor,wings,punches,exhaust";
+    uint8_t sources[96];nes_sha256(MM6_PROTO_PNG,sizeof MM6_PROTO_PNG,sources);
+    nes_sha256(MM6_PROTO_JUMP_PNG,sizeof MM6_PROTO_JUMP_PNG,sources+32);
+    nes_sha256(adapter,sizeof adapter-1,sources+64);nes_sha256(sources,sizeof sources,out);return 1;
+#else
+    (void)out;return 0;
+#endif
+}
 int mm6_proto_enabled(void) {return s_on;}
 int mm6_proto_selected(void) {int character=mm6_coop_character();return s_on && (character>=0?character:S.selected);}
 int mm6_proto_swapping(void) {return s_on && !mm6_coop_enabled() && S.teleport;}

@@ -4,6 +4,8 @@
 #include "mm6_wide.h"
 #include "mm6_coop.h"
 #include "mm6_charge.h"
+#include "mm6_net.h"
+#include "cyc_core.h"
 #include "cyc_host_extras.h"
 #include "cyc_tcp.h"
 #ifdef CYC_WITH_RECOMP_UI
@@ -26,11 +28,14 @@ static Controls s_players[2];
 #define S (s_players[mm6_coop_seat()])
 static int s_on;
 static int s_proto_on,s_proto_mode=1,s_proto_start=1;
-static int s_coop,s_roster;
+static int s_coop,s_roster,s_view_preference;
+int mm6_host_view_preference(void){return s_view_preference;}
+void mm6_host_view_set(int mode){s_view_preference=mode;mm6_coop_view_set(mode);}
 static uint8_t *s_cart;
 static size_t s_size;
 static FILE *s_log;
-static int s_wide;
+static int s_wide,s_flicker;
+static unsigned s_lines;
 static char s_aspect[16]="fit";
 static unsigned prg(unsigned bank,unsigned address) {
     size_t at=(size_t)bank*8192+(address&8191);
@@ -152,19 +157,23 @@ static void power(void *ctx) {
         s_cart=malloc(s_size);
         if(s_cart && cyc_mod_copy_cart_payload(s_cart,s_size)!=s_size){free(s_cart);s_cart=NULL;}
     }
+    if(!cyc_set_extra_scanlines(s_lines))fprintf(stderr,"[Mods] MM6 extra CPU budget is unavailable for this cartridge\n");
 }
+static void state_loaded(void *ctx){(void)ctx;cyc_set_extra_scanlines(s_lines);}
 static void end(void *ctx) {
     (void)ctx;if(!safe())S.pending=0;mm6_proto_end();mm6_coop_end();mm6_charge_end();
     char fields[512],coop[512],wide[256];mm6_proto_json(fields,sizeof fields);mm6_coop_json(coop,sizeof coop);mm6_wide_json(wide,sizeof wide);
-    if(s_log)fprintf(s_log,"{\"frame\":%u,\"weapon\":%u,\"form\":%u,\"terrain\":%u,\"pose_kind\":%u,\"hurt\":%u,\"hp\":%u,\"charge\":%u,\"held\":%u,\"changes\":%llu,%s,%s,%s}\n",
-        cyc_ring_frame,R(0x699),R(0x9b),R(0xa7),R(0x94),S.hurt,R(0x3e5),R(0x9e),S.previous,(unsigned long long)S.changes,fields,coop,wide);
+    if(s_log)fprintf(s_log,"{\"frame\":%u,\"weapon\":%u,\"form\":%u,\"terrain\":%u,\"pose_kind\":%u,\"hurt\":%u,\"hp\":%u,\"charge\":%u,\"held\":%u,\"cpu_lines\":%u,\"changes\":%llu,%s,%s,%s}\n",
+        cyc_ring_frame,R(0x699),R(0x9b),R(0xa7),R(0x94),S.hurt,R(0x3e5),R(0x9e),S.previous,cyc_extra_scanlines(),(unsigned long long)S.changes,fields,coop,wide);
 }
 static bool option(void *ctx,const char *name,const char *value) {
     (void)ctx;
+    if(mm6_net_locked() && strcmp(name,"--coop-view"))return false;
+    mm6_net_note_option(name);
     if(!strcmp(name,"--mm6-coop-poke"))return mm6_coop_test_poke(value)!=0;
     if(!strcmp(name,"--coop-view")){
         int mode=!strcmp(value,"shared")?0:!strcmp(value,"split")?1:!strcmp(value,"player1")?2:!strcmp(value,"player2")?3:-1;
-        if(mode<0)return false;mm6_coop_view_set(mode);return true;
+        if(mode<0 || !mm6_net_view_allowed(mode))return false;mm6_host_view_set(mode);return true;
     }
     if(!strcmp(name,"--coop") || !strcmp(name,"--coop-roster")) {
         if(!strcmp(name,"--coop")) {
@@ -189,7 +198,11 @@ static bool option(void *ctx,const char *name,const char *value) {
     }
     if(!strcmp(name,"--no-flicker")){
         if(strcmp(value,"on") && strcmp(value,"off"))return false;
-        mm6_view_no_flicker(!strcmp(value,"on"));return true;
+        s_flicker=!strcmp(value,"on");mm6_view_no_flicker(s_flicker);return true;
+    }
+    if(!strcmp(name,"--slowdown-reduction")){
+        if(strcmp(value,"on") && strcmp(value,"off"))return false;
+        s_lines=!strcmp(value,"on")?262:0;cyc_set_extra_scanlines(s_lines);return true;
     }
     if(!strcmp(name,"--protoman")) {
         if(strcmp(value,"on") && strcmp(value,"off"))return false;
@@ -216,9 +229,43 @@ static int valid(const uint8_t *in,int len) {
     return 1;
 }
 static int set(const uint8_t *in,int len) {if(!valid(in,len))return 0;if(len)memcpy(s_players,in,sizeof s_players);else memset(s_players,0,sizeof s_players);return 1;}
-static void reset(void){enabled(0);s_coop=0;mm6_coop_set(0,s_roster);s_proto_on=0;mm6_proto_set(0,s_proto_mode,s_proto_start);mm6_view_no_flicker(0);s_wide=0;mm6_view_wide(0,s_aspect);}
+static void reset(void){if(mm6_net_locked())return;enabled(0);s_coop=0;mm6_coop_set(0,s_roster);s_proto_on=0;mm6_proto_set(0,s_proto_mode,s_proto_start);s_flicker=0;mm6_view_no_flicker(0);s_lines=0;cyc_set_extra_scanlines(0);s_wide=0;mm6_view_wide(0,s_aspect);}
 static void activate(void){enabled(1);}
-static void no_flicker(void){mm6_view_no_flicker(1);}
+static void no_flicker(void){if(mm6_net_locked())return;s_flicker=1;mm6_view_no_flicker(1);}
+static int option_value(const char *package,const char *feature,const char *key,const char *wanted,const char *fallback){
+    char value[32];if(!nes_mod_option_value(package,feature,key,value,sizeof value))snprintf(value,sizeof value,"%s",fallback);return !strcmp(value,wanted);
+}
+static void proto_activate(void){
+    if(mm6_net_locked())return;
+    const char *id="mega-man-6-usa.character.protoman";
+    s_proto_on=1;s_proto_mode=option_value(id,"protoman","mode","protoman","protoman");
+    s_proto_start=option_value(id,"protoman","start","protoman","protoman");
+    mm6_proto_set(1,s_proto_mode,s_proto_start);
+}
+static void coop_activate(void){
+    if(mm6_net_locked())return;const char *id="mega-man-6-usa.coop";
+    s_coop=1;s_roster=option_value(id,"coop","player-one","protoman","megaman");
+    mm6_proto_set(1,s_proto_mode,s_proto_start);mm6_coop_set(1,s_roster);
+    int view=option_value(id,"coop","coop-view","split","shared")?1:option_value(id,"coop","coop-view","p1","shared")?2:option_value(id,"coop","coop-view","p2","shared")?3:0;
+    mm6_host_view_set(view);mm6_controls_refresh();
+}
+static void wide_activate(void){
+    if(mm6_net_locked())return;s_wide=1;
+    nes_mod_option_value("mega-man-6-usa.enhancement.widescreen","widescreen","aspect",s_aspect,sizeof s_aspect);
+    mm6_view_wide(1,s_aspect);
+}
+static void slowdown_activate(void){if(mm6_net_locked())return;s_lines=262;cyc_set_extra_scanlines(s_lines);}
+Mm6Settings mm6_host_settings(void){
+    Mm6Settings c={s_coop,mm6_coop_independent(),s_roster,s_proto_on,s_proto_mode,s_proto_start,s_on,s_wide,s_flicker,(int)s_lines};return c;
+}
+int mm6_host_apply_settings(Mm6Settings c,int seat){
+    int view=s_view_preference;const char *layout=c.independent?(view?view==1?"split":view==2?"player1":"player2":seat==1?"player2":"player1"):"shared";
+    return option(NULL,"--coop",c.coop?"on":"off") && option(NULL,"--coop-roster",c.roster?"protoman-megaman":"megaman-protoman") &&
+        option(NULL,"--coop-view",layout) && option(NULL,"--protoman",c.proto?"on":"off") &&
+        option(NULL,"--proto-mode",c.mode?"protoman":"megaman") && option(NULL,"--proto-start",c.start?"protoman":"megaman") &&
+        option(NULL,"--weapon-cycle",c.weapons?"on":"off") && option(NULL,"--wide",c.wide?"on":"off") &&
+        option(NULL,"--no-flicker",c.flicker?"on":"off") && option(NULL,"--slowdown-reduction",c.lines?"on":"off");
+}
 NES_MOD_CONSTRUCTOR(register_mm6_controls) {
     mm6_proto_register();
     mm6_coop_register();
@@ -230,12 +277,14 @@ NES_MOD_CONSTRUCTOR(register_mm6_controls) {
     nes_mod_register_savestate_hook("mm6.controls",get,set);nes_mod_register_savestate_validator("mm6.controls",valid);
     nes_mod_register_reset_callback(reset);nes_mod_register_activation_plugin("mega-man-6-usa.weapons",activate);
     nes_mod_register_activation_plugin("mega-man-6-usa.noflicker",no_flicker);
+    nes_mod_register_activation_plugin("mm6.protoman",proto_activate);nes_mod_register_activation_plugin("mm6.coop",coop_activate);
+    nes_mod_register_activation_plugin("mm6.widescreen",wide_activate);nes_mod_register_activation_plugin("mm6.slowdown",slowdown_activate);
 }
 static void tcp_state(int id,const char *line){
     char view[16];if(cyc_tcp_str(line,"view",view,sizeof view)){
         int mode=!strcmp(view,"shared")?0:!strcmp(view,"split")?1:!strcmp(view,"player1")?2:!strcmp(view,"player2")?3:-1;
-        if(mode<0 || !mm6_coop_enabled()){cyc_tcp_err(id,"view needs active co-op and shared|split|player1|player2");return;}
-        mm6_coop_view_set(mode);
+        if(mode<0 || !mm6_coop_enabled() || !mm6_net_view_allowed(mode)){cyc_tcp_err(id,"view needs active co-op and an allowed shared|split|player1|player2 layout");return;}
+        mm6_host_view_set(mode);
     }
     char fields[1024];int n=snprintf(fields,sizeof fields,"\"view\":%d,",mm6_coop_view_mode());
     mm6_coop_json(fields+n,sizeof fields-n);cyc_tcp_ok(id,fields);
@@ -246,11 +295,14 @@ static int menu_get(void *ctx,const RecompRuntimeUiItem *item,int *out){
     (void)ctx;if(strcmp(item->key,"mm6.coop_view"))return 0;*out=mm6_coop_view_mode();return 1;
 }
 static int menu_set(void *ctx,const RecompRuntimeUiItem *item,int value){
-    (void)ctx;if(strcmp(item->key,"mm6.coop_view") || !mm6_coop_enabled() || value<0 || value>3)return 0;
-    mm6_coop_view_set(value);return mm6_coop_view_mode()==value;
+    (void)ctx;if(strcmp(item->key,"mm6.coop_view") || !mm6_coop_enabled() || value<0 || value>3 || !mm6_net_view_allowed(value))return 0;
+    mm6_host_view_set(value);return mm6_coop_view_mode()==value;
 }
 static int menu_enabled(void *ctx,const RecompRuntimeUiItem *item){
-    (void)ctx;return !strcmp(item->key,"mm6.coop_view") && mm6_coop_enabled();
+    (void)ctx;return !strcmp(item->key,"mm6.coop_view") && mm6_coop_enabled() && (!mm6_net_locked() || mm6_coop_independent());
+}
+static bool menu_netplay_allowed(void *ctx,const RecompRuntimeUiItem *item,int value){
+    (void)ctx;return item && !strcmp(item->key,"mm6.coop_view") && value>=1 && value<=3 && mm6_coop_enabled() && mm6_coop_independent();
 }
 static const char *const view_choices[]={"Shared screen","Split screen","Player one","Player two"};
 static const RecompRuntimeUiItem menu_items[]={
@@ -271,15 +323,19 @@ const CycHostExtras *cyc_host_extras(void) {
         {"--coop",true,"on|off: development native coroutine controls prototype"},
         {"--coop-roster",true,"megaman-protoman|protoman-megaman: development roster"},
         {"--no-flicker",true,"on|off: complete native sprite presentation"},
+        {"--slowdown-reduction",true,"on|off: extra native CPU time to reduce slowdown"},
         {"--world-audit",true,"FILE: native horizontal terrain conformance for QA"},
         {"--wide",true,"on|off: development authored horizontal terrain"},
         {"--aspect",true,"fit|stock|16-9|21-9|32-9: development terrain aspect"},
         {"--coop-view",true,"shared|split|player1|player2: local co-op presentation"},
         {"--mm6-coop-poke",true,"FRAME:SEAT:HEX_ADDRESS:HEX_VALUE: personal QA prerequisite"}};
-    static const CycHostExtras extras={.power_on=power,.input=input,.frame_end=end,.option=option,.tcp_setup=tcp,
+    static const CycHostExtras extras={.power_on=power,.input=input,.frame_end=end,.state_loaded=state_loaded,.option=option,.tcp_setup=tcp,
         .options=options,.option_count=sizeof options/sizeof *options,.input_profile=&profile,
 #ifdef CYC_WITH_RECOMP_UI
         .menu_items=menu_items,.menu_item_count=sizeof menu_items/sizeof *menu_items,.menu_callbacks=&menu_callbacks,
+#ifdef CYC_HOST_EXTRAS_HAS_NETPLAY_VALUE_POLICY
+        .menu_netplay_value_allowed=menu_netplay_allowed,
+#endif
 #endif
     };
     return &extras;
