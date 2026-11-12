@@ -1,0 +1,15 @@
+# Health, lives, ammo and contact placement are setup bypasses inherited from
+# the life route. Native damage, Game Over, menu acceptance and revival run normally.
+INCLUDE coop-life.route
+4570 POKE 00A9 00
+5400 SAVESTATE game_over
+5500 START
+5501 -
+6150 RIGHT
+6151 -
+6200 START
+6201 -
+6500 SAVESTATE new_stage_intro
+6700 START
+6701 -
+7399 SAVESTATE revived

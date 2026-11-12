@@ -64,13 +64,15 @@ Either controller can open and operate its own native inventory while the world 
 
 An individual death retains the native cue and particles while the partner keeps playing with stage music. The last death uses one shared life and the native retry, restoring both players to full HP and their own ammo with the native Buster selection. Both death orders, a load during the partner's actual in-flight death routine, and native/interpreter execution have targeted coverage. These assisted routes set health, inventory and projectile/position prerequisites; they leave deaths, the life decrement and retry to the native game.
 
+Either controller can navigate the boot screens and accept Game Over. After selecting another stage, both players revive with native full HP, Buster selected and their own retained ammo. A living player's personal inventory continues to accept only its owner's controls. Native/interpreter execution and cold loads cover the Game Over menu and subsequent stage intro.
+
 Charge flashes belong to each character. Pausing freezes both effects; releasing a shot or changing equipment clears only that player's effect. A charged survivor retains the charge and its artwork after the partner dies. The small palette sequence reads the native cartridge's own packets; Buster movement, damage and allocation remain native.
 
 The optional, default-on **No sprite flicker** display package captures complete native sprite packets in the game's original priority. It draws parts beyond the hardware scanline and 64-part OAM limits without changing the native OAM, gameplay or audio. This keeps a surviving player visible during dense death effects. `--no-flicker off` restores the original hardware limits. The native inventory and other global screens retain their original rendering.
 
 A targeted death-effect scene captures 109 native parts, including all nine survivor parts omitted by the full hardware OAM. On/off gameplay and PCM match; native/interpreter runs and a cold load reproduce the complete packets and first picture. A fresh packaged catalog enables the option, and a simple gameplay scene matches the original native pixels exactly. These checks do not establish complete stage coverage.
 
-This is an initial local implementation. Partner HUD, complete weapon and adapter behavior, checkpoint revival, withdrawal/rejoin, game-over handling and stage transitions, all view modes, adaptive widescreen and online play remain unfinished. Online sessions are explicitly blocked while these development features are active.
+This is an initial local implementation. Partner HUD, complete weapon and adapter behavior, checkpoint revival, withdrawal/rejoin, complete stage transitions, all view modes, adaptive widescreen and online play remain unfinished. Online sessions are explicitly blocked while these development features are active.
 
 ```text
 python tools/qa_route.py tests/routes/coop-controls.route --frames 4700 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-controls --extra=--coop --extra=on
@@ -80,4 +82,5 @@ python tools/qa_route.py tests/routes/coop-life.route --frames 5400 --exe build/
 python tools/qa_route.py tests/routes/coop-life-reverse.route --frames 5600 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-life-reverse --extra=--coop --extra=on
 python tools/qa_route.py tests/routes/coop-charge.route --frames 4600 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-charge --extra=--coop --extra=on
 python tools/qa_route.py tests/routes/coop-charge-handoff.route --frames 4700 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/sprite-overflow --extra=--coop --extra=on --extra=--coop-roster --extra=protoman-megaman --extra=--no-flicker --extra=on
+python tools/qa_route.py tests/routes/coop-gameover.route --frames 7400 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/game-over --extra=--coop --extra=on
 ```

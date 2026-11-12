@@ -149,7 +149,14 @@ void mm6_coop_input(uint8_t buttons[2]){
         else C.pending[i]=0;
         C.previous[i]=buttons[i];
     }
-    buttons[0]=C.raw[C.owner];buttons[1]=0;
+    /* Title, stage selection and the completed team-wipe menu belong to
+     * both controllers. A live personal inventory keeps its pauser's input. */
+    int global=!C.initialized || (C.dead[0] && C.dead[1]);
+    buttons[0]=global?(uint8_t)(C.raw[0]|C.raw[1]):C.raw[C.owner];buttons[1]=0;
+    if(global){
+        if((buttons[0]&3)==3)buttons[0]&=(uint8_t)~3;
+        if((buttons[0]&12)==12)buttons[0]&=(uint8_t)~12;
+    }
 }
 void mm6_coop_end(void){if(s_on && C.initialized)capture(&C.player[C.owner]);}
 static int animation_stop(uint16_t address){(void)address;return s_animating && cyc_mod_isolated();}
