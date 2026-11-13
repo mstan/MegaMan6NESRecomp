@@ -26,7 +26,7 @@ typedef struct {
     uint8_t raw[2],previous[2],pending[2];
     Player player[2];uint64_t world,updates[2];
     uint8_t dead[2],retry,retry_ammo[2][10];
-    uint8_t playing,scene,scene_stage,scene_page,scene_leader,damage_owner[23];
+    uint8_t playing,scene,scene_stage,scene_page,scene_leader,damage_owner[23],riders[23];
     uint64_t transitions[2],finishers[2];
     uint64_t room_checks;uint16_t room_address;uint8_t room_flags;
     uint8_t inventory_pending,inventory_ammo[2][10];
@@ -116,10 +116,13 @@ static int target_field(int a){
 }
 static void target_capture(Player *p){for(int i=0;i<s_count;i++)if(target_field(s_addr[i]))p->ram[i]=R(s_addr[i]);}
 static void target_project(const Player *p){for(int i=0;i<s_count;i++)if(target_field(s_addr[i]))P(s_addr[i],p->ram[i]);}
+static void rider_forget(int seat){for(int slot=8;slot<22;slot++)C.riders[slot]&=(uint8_t)~(1u<<seat);}
 static int target_begin(uint16_t address){
     (void)address;
-    if(!s_on || !C.initialized || C.target_active || C.source_pending || C.scene || cyc_mod_isolated() || (R(0x22)&128) || (R(0x3B7)&2))return 0;
-    CycModRegs r;cyc_mod_regs(&r);if(r.x<8 || r.x>=22 || !R(0x3A0+r.x))return 0;
+    if(!s_on || !C.initialized || cyc_mod_isolated())return 0;
+    CycModRegs r;cyc_mod_regs(&r);
+    if(!r.x){rider_forget(C.owner);return 0;}
+    if(C.target_active || C.source_pending || C.scene || (R(0x22)&128) || (R(0x3B7)&2) || r.x<8 || r.x>=22 || !R(0x3A0+r.x))return 0;
     target_capture(&C.player[C.owner]);
     int chosen=C.owner,best=0x7FFFFFFF,x=(R(0x46F+r.x)<<8)|R(0x486+r.x),y=R(0x4CB+r.x);
     for(int seat=0;seat<2;seat++)if(mm6_coop_live(seat)){
@@ -144,6 +147,36 @@ static void target_end(void){
     for(int i=0;i<4;i++)P(input[i],C.target_input[i]);
     C.target_active=0;
     if(!s_on)mm6_coop_set(0,s_roster);
+}
+static int rider_touch(uint16_t address){
+    (void)address;
+    if(!s_on || !C.initialized || C.scene || cyc_mod_isolated() || R(0x4A)!=0x38 || R(0x8F))return 0;
+    CycModRegs r;cyc_mod_regs(&r);
+    if(r.y>=8 && r.y<22 && R(0x3A0+r.y)==0xA0)C.riders[r.y]|=(uint8_t)(1u<<C.owner);
+    return 0;
+}
+static int rider_move(uint16_t address){
+    (void)address;
+    if(!s_on || !C.initialized || C.scene || cyc_mod_isolated() || R(0x4A)!=0x29)return 0;
+    CycModRegs r;cyc_mod_regs(&r);int slot=R(0x8F);
+    if(r.x || slot<8 || slot>=22 || R(0x3A0+slot)!=0xA0 ||
+       (R(0x100|(uint8_t)(r.s+1))|(R(0x100|(uint8_t)(r.s+2))<<8))!=0x8C9F)return 0;
+    /* The platform's one native update calls E4D3 for its passenger. Its
+     * shared contact byte cannot identify both riders, and nearest-target
+     * projection can even expose a nearby body that has just jumped off.
+     * Keep the original mover for a riding projected body; apply that same
+     * signed 8.8 displacement to the other actual native top contacts. */
+    for(int seat=0;seat<2;seat++)if(seat!=C.owner && (C.riders[slot]&(1u<<seat)) && mm6_coop_live(seat)){
+        static const uint16_t fields[2][3]={{0x49D,0x486,0x46F},{0x4E2,0x4CB,0x4B4}};
+        for(int axis=0;axis<2;axis++){
+            const uint16_t *a=fields[axis];
+            uint32_t pos=(uint32_t)mm6_coop_read(seat,a[0])|((uint32_t)mm6_coop_read(seat,a[1])<<8)|((uint32_t)mm6_coop_read(seat,a[2])<<16);
+            int velocity=(int8_t)R(axis?0xEE:0xED)*256+R(axis?0xEC:0xEB);
+            pos=(pos+velocity)&0xFFFFFF;
+            for(int byte=0;byte<3;byte++)put(&C.player[seat],a[byte],pos>>(byte*8));
+        }
+    }
+    return !(C.riders[slot]&(1u<<C.owner)) || !mm6_coop_live(C.owner);
 }
 int mm6_coop_test_poke(const char *value){
     unsigned frame,seat,address,byte;int n=0;addresses();
@@ -204,6 +237,7 @@ static int safe_arrival(int *x,int *y){
     return 0;
 }
 static void start_arrival(int seat,int x,int y,int heal){
+    rider_forget(seat);
     Player *p=&C.player[seat];int hp=personal(p,0x3E5),form=personal(p,0x9B),weapon=personal(p,0x699),fuel=personal(p,0x9C);
     /* The survivor supplies only a real standing body's native continuation.
      * HP, equipment and ammo belong to the returning personal record. */
@@ -226,6 +260,7 @@ static void start_arrival(int seat,int x,int y,int heal){
     if(seat==C.owner)project(p);
 }
 static void depart(int seat){
+    rider_forget(seat);
     Player *p=&C.player[seat];C.withdrawn|=(uint8_t)(1u<<seat);C.arriving&=(uint8_t)~(1u<<seat);
     C.teleport[seat]=1;C.withdrawals[seat]++;C.select_hold[0]=C.select_hold[1]=0;C.select_armed[seat]=0;
     for(int slot=1;slot<8;slot++)put(p,0x3A0+slot,0);
@@ -479,6 +514,7 @@ static int global_scene(uint16_t address){
         if(C.inventory_pending)for(int seat=0;seat<2;seat++)for(int i=0;i<10;i++)
             C.inventory_ammo[seat][i]=(uint8_t)mm6_coop_read(seat,0x688+i);
         finish_wait();C.playing=C.initialized=C.eligible=C.guest_round=C.scene=0;
+        memset(C.riders,0,sizeof C.riders);
         memset(&C.build,0,sizeof C.build);memset(&C.frame,0,sizeof C.frame);
     }
     return 0;
@@ -499,6 +535,7 @@ static int global_ammo(uint16_t address){
 }
 static void initialize(void){
     C.owner=C.anchor=C.guest_round=0;C.initialized=1;
+    memset(C.riders,0,sizeof C.riders);
     capture(&C.player[0]);C.player[1]=C.player[0];
     mm6_proto_clone_animation(0,1);
     /* A native entry may stand on a one-tile ledge. An unchecked offset can
@@ -715,22 +752,22 @@ void mm6_coop_set(int enabled,int roster){
     nes_mod_set_function_hook_enabled("mm6.coop.retry",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.death-music",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.source-loaded",s_on || C.source_pending);
-    static const char *hooks[]={"room-door","room-right","room-left","room-down-left","room-down-right","room-up-left","room-up-right","room-end-right","room-end-left","room-end-down-right","room-end-down-left","room-end-up-right","room-end-up-left","personal-camera","hit-normal","hit-piercing","hit-clear","hit-reflected","boss-lethal","robot-lethal","robot-jet-lethal","global-scene","stage-begin","ammo-refill","beat-refill","weapon-grant","new-game-inventory"};
+    static const char *hooks[]={"room-door","room-right","room-left","room-down-left","room-down-right","room-up-left","room-up-right","room-end-right","room-end-left","room-end-down-right","room-end-down-left","room-end-up-right","room-end-up-left","personal-camera","hit-normal","hit-piercing","hit-clear","hit-reflected","boss-lethal","robot-lethal","robot-jet-lethal","global-scene","stage-begin","ammo-refill","beat-refill","weapon-grant","new-game-inventory","rider-touch","rider-move"};
     for(unsigned i=0;i<sizeof hooks/sizeof *hooks;i++){char id[80];snprintf(id,sizeof id,"mm6.coop.%s",hooks[i]);nes_mod_set_function_hook_enabled(id,s_on);}
     continuation_hooks();
     nes_mod_set_local_only("MM6 native co-op prototype (unqualified netplay)",s_on);
     mm6_coop_view_set(s_view);
 }
-static int get(uint8_t *out,int cap){if(cap<sizeof C)return -1;memcpy(C.magic,"M6CA",4);C.enabled=(uint8_t)s_on;C.roster=(uint8_t)s_roster;C.wait_mode=(uint8_t)s_wait_both;memcpy(out,&C,sizeof C);return sizeof C;}
+static int get(uint8_t *out,int cap){if(cap<sizeof C)return -1;memcpy(C.magic,"M6CB",4);C.enabled=(uint8_t)s_on;C.roster=(uint8_t)s_roster;C.wait_mode=(uint8_t)s_wait_both;memcpy(out,&C,sizeof C);return sizeof C;}
 static int valid(const uint8_t *in,int len){
     if(!len)return !s_on;if(!in || len!=sizeof C)return 0;Coop p;memcpy(&p,in,sizeof p);
-    if(memcmp(p.magic,"M6CA",4) || p.enabled!=s_on || p.roster!=s_roster || p.initialized>1 || p.eligible>1 || p.owner>1 || p.anchor>1 || p.guest_round>1 || p.dead[0]>2 || p.dead[1]>2 || p.retry>2 || p.playing>1 || p.scene>3 || p.scene_leader>1 || p.inventory_pending>1 || p.source_pending>2 || (p.source_pending && (!p.initialized || p.guest_round || p.scene)) || (p.initialized && !p.target_active && p.owner!=(p.anchor^p.guest_round)))return 0;
+    if(memcmp(p.magic,"M6CB",4) || p.enabled!=s_on || p.roster!=s_roster || p.initialized>1 || p.eligible>1 || p.owner>1 || p.anchor>1 || p.guest_round>1 || p.dead[0]>2 || p.dead[1]>2 || p.retry>2 || p.playing>1 || p.scene>3 || p.scene_leader>1 || p.inventory_pending>1 || p.source_pending>2 || (p.source_pending && (!p.initialized || p.guest_round || p.scene)) || (p.initialized && !p.target_active && p.owner!=(p.anchor^p.guest_round)))return 0;
     if(p.wait_mode!=s_wait_both || p.waiting>2 || (p.waiting && (!p.initialized || p.scene || (p.withdrawn&p.waiting) || (p.wait_address!=0xD441 && p.wait_address!=0xD64F && p.wait_address!=0xD6AF && p.wait_address!=0xD53C && p.wait_address!=0xD583 && p.wait_address!=0xD5CD && p.wait_address!=0xD60E))))return 0;
     if(p.target_active>1 || p.target_owner>1 || (p.target_active && (!p.initialized || p.guest_round || p.source_pending || p.scene || p.target_actor<8 || p.target_actor>=22 || p.target_owner!=p.anchor || p.owner==p.target_owner)))return 0;
     if(p.withdrawn>3 || p.arriving>3 || p.checkpoint>127 || p.revive_pending>3 || p.deactivate_pending>1)return 0;
     for(int seat=0;seat<2;seat++)if(p.teleport[seat]>32 || p.select_hold[seat]>90 || p.select_armed[seat]>1 ||
         ((p.arriving&(1u<<seat)) && (!(p.withdrawn&(1u<<seat)) || !p.teleport[seat])))return 0;
-    for(int i=0;i<23;i++)if(p.damage_owner[i]>2)return 0;
+    for(int i=0;i<23;i++)if(p.damage_owner[i]>2 || p.riders[i]>3 || ((i<8 || i>=22) && p.riders[i]))return 0;
     const Picture *pictures[2]={&p.build,&p.frame};
     for(int k=0;k<2;k++){
         const Picture *q=pictures[k];if(q->valid>1 || q->seat>1 || q->count>PART_CAP || q->body.pose>=CYC_PROTO_POSE_COUNT || q->body.active>2 || q->body.form>2 || q->body.native_palette>1 || (q->body.active==2 && !q->body.form))return 0;
@@ -753,6 +790,8 @@ void mm6_coop_register(void){
     addresses();nes_mod_register_function_entry_plugin("mm6.coop.begin",0xE41C,begin);nes_mod_register_function_entry_plugin("mm6.coop.actor-end",0xE47A,actor_end);
     nes_mod_register_function_entry_plugin("mm6.coop.target-begin",0xE43F,target_begin);
     nes_mod_register_function_entry_plugin("mm6.coop.suspended-body",0xE482,suspended_body);
+    nes_mod_register_function_entry_plugin("mm6.coop.rider-touch",0x8FAD,rider_touch);
+    nes_mod_register_function_entry_plugin("mm6.coop.rider-move",0xE4D3,rider_move);
     nes_mod_register_function_entry_plugin("mm6.coop.animation-stop",0xE24B,animation_stop);
     nes_mod_register_function_entry_plugin("mm6.coop.dying",0x8E62,dying);
     nes_mod_register_function_entry_plugin("mm6.coop.pit",0x8F03,dying);
