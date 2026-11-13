@@ -470,9 +470,3 @@ id = "mm6.coop.rider-touch"
 addr = 0x8FAD
 length = 8
 crc32 = 0x023644EF
-
-[[mod_function_hook]]
-id = "mm6.coop.rider-move"
-addr = 0xE4D3
-length = 8
-crc32 = 0x6A9DEAEF
