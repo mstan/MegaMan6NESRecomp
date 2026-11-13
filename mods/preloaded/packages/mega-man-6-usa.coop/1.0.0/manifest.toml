@@ -73,3 +73,16 @@ label = "Player 1 bindings"
 [[option.choice]]
 value = "device2"
 label = "Player 2 bindings"
+
+[[option]]
+feature = "coop"
+id = "wait-for-both"
+label = "Room transitions"
+type = "choice"
+default = "either"
+[[option.choice]]
+value = "either"
+label = "Either player can lead"
+[[option.choice]]
+value = "both"
+label = "Wait for both players"

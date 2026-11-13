@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-typedef struct {int coop,independent,roster,proto,mode,start,weapons,wide,flicker,lines;} Mm6Settings;
+typedef struct {int coop,independent,roster,proto,mode,start,weapons,wide,flicker,lines,wait;} Mm6Settings;
 int mm6_net_locked(void);
 int mm6_net_view_allowed(int mode);
 int mm6_net_simulation_width(int local_width);

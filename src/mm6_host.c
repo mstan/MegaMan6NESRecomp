@@ -172,6 +172,10 @@ static bool option(void *ctx,const char *name,const char *value) {
     if(mm6_net_locked() && strcmp(name,"--coop-view"))return false;
     mm6_net_note_option(name);
     if(!strcmp(name,"--mm6-coop-poke"))return mm6_coop_test_poke(value)!=0;
+    if(!strcmp(name,"--coop-wait")){
+        if(strcmp(value,"either") && strcmp(value,"both"))return false;
+        mm6_coop_wait_set(!strcmp(value,"both"));return true;
+    }
     if(!strcmp(name,"--coop-view")){
         int mode=!strcmp(value,"shared")?0:!strcmp(value,"split")?1:!strcmp(value,"player1")?2:!strcmp(value,"player2")?3:-1;
         if(mode<0 || !mm6_net_view_allowed(mode))return false;mm6_host_view_set(mode);return true;
@@ -230,7 +234,7 @@ static int valid(const uint8_t *in,int len) {
     return 1;
 }
 static int set(const uint8_t *in,int len) {if(!valid(in,len))return 0;if(len)memcpy(s_players,in,sizeof s_players);else memset(s_players,0,sizeof s_players);return 1;}
-static void reset(void){if(mm6_net_locked())return;enabled(0);s_coop=0;mm6_coop_set(0,s_roster);s_proto_on=0;mm6_proto_set(0,s_proto_mode,s_proto_start);s_flicker=0;mm6_view_no_flicker(0);s_lines=0;cyc_set_extra_scanlines(0);s_wide=0;mm6_view_wide(0,s_aspect);}
+static void reset(void){if(mm6_net_locked())return;enabled(0);s_coop=0;mm6_coop_set(0,s_roster);mm6_coop_wait_set(0);s_proto_on=0;mm6_proto_set(0,s_proto_mode,s_proto_start);s_flicker=0;mm6_view_no_flicker(0);s_lines=0;cyc_set_extra_scanlines(0);s_wide=0;mm6_view_wide(0,s_aspect);}
 static void activate(void){enabled(1);}
 static void no_flicker(void){if(mm6_net_locked())return;s_flicker=1;mm6_view_no_flicker(1);}
 static int option_value(const char *package,const char *feature,const char *key,const char *wanted,const char *fallback){
@@ -246,6 +250,7 @@ static void proto_activate(void){
 static void coop_activate(void){
     if(mm6_net_locked())return;const char *id="mega-man-6-usa.coop";
     s_coop=1;s_roster=option_value(id,"coop","player-one","protoman","megaman");
+    mm6_coop_wait_set(option_value(id,"coop","wait-for-both","both","either"));
     mm6_proto_set(1,s_proto_mode,s_proto_start);mm6_coop_set(1,s_roster);
     int view=option_value(id,"coop","coop-view","split","shared")?1:option_value(id,"coop","coop-view","p1","shared")?2:option_value(id,"coop","coop-view","p2","shared")?3:0;
     mm6_host_view_set(view);mm6_controls_refresh();
@@ -257,12 +262,12 @@ static void wide_activate(void){
 }
 static void slowdown_activate(void){if(mm6_net_locked())return;s_lines=262;cyc_set_extra_scanlines(s_lines);}
 Mm6Settings mm6_host_settings(void){
-    Mm6Settings c={s_coop,mm6_coop_independent(),s_roster,s_proto_on,s_proto_mode,s_proto_start,s_on,s_wide,s_flicker,(int)s_lines};return c;
+    Mm6Settings c={s_coop,mm6_coop_independent(),s_roster,s_proto_on,s_proto_mode,s_proto_start,s_on,s_wide,s_flicker,(int)s_lines,mm6_coop_wait_both()};return c;
 }
 int mm6_host_apply_settings(Mm6Settings c,int seat){
     int view=s_view_preference;const char *layout=c.independent?(view?view==1?"split":view==2?"player1":"player2":seat==1?"player2":"player1"):"shared";
     return option(NULL,"--coop",c.coop?"on":"off") && option(NULL,"--coop-roster",c.roster?"protoman-megaman":"megaman-protoman") &&
-        option(NULL,"--coop-view",layout) && option(NULL,"--protoman",c.proto?"on":"off") &&
+        option(NULL,"--coop-view",layout) && option(NULL,"--coop-wait",c.wait?"both":"either") && option(NULL,"--protoman",c.proto?"on":"off") &&
         option(NULL,"--proto-mode",c.mode?"protoman":"megaman") && option(NULL,"--proto-start",c.start?"protoman":"megaman") &&
         option(NULL,"--weapon-cycle",c.weapons?"on":"off") && option(NULL,"--wide",c.wide?"on":"off") &&
         option(NULL,"--no-flicker",c.flicker?"on":"off") && option(NULL,"--slowdown-reduction",c.lines?"on":"off");
@@ -293,23 +298,33 @@ static void tcp_state(int id,const char *line){
 static void tcp(void *ctx){(void)ctx;cyc_tcp_register("mm6_state","MM6 co-op state and local view selection",tcp_state);}
 #ifdef CYC_WITH_RECOMP_UI
 static int menu_get(void *ctx,const RecompRuntimeUiItem *item,int *out){
-    (void)ctx;if(strcmp(item->key,"mm6.coop_view"))return 0;*out=mm6_coop_view_mode();return 1;
+    (void)ctx;if(!strcmp(item->key,"mm6.coop_wait")){*out=mm6_coop_wait_both();return 1;}
+    if(strcmp(item->key,"mm6.coop_view"))return 0;*out=mm6_coop_view_mode();return 1;
 }
 static int menu_set(void *ctx,const RecompRuntimeUiItem *item,int value){
-    (void)ctx;if(strcmp(item->key,"mm6.coop_view") || !mm6_coop_enabled() || value<0 || value>3 || !mm6_net_view_allowed(value))return 0;
+    (void)ctx;if(!strcmp(item->key,"mm6.coop_wait")){
+        if(!mm6_coop_enabled() || mm6_net_locked() || value<0 || value>1)return 0;
+        mm6_coop_wait_set(value);return 1;
+    }
+    if(strcmp(item->key,"mm6.coop_view") || !mm6_coop_enabled() || value<0 || value>3 || !mm6_net_view_allowed(value))return 0;
     mm6_host_view_set(value);return mm6_coop_view_mode()==value;
 }
 static int menu_enabled(void *ctx,const RecompRuntimeUiItem *item){
-    (void)ctx;return !strcmp(item->key,"mm6.coop_view") && mm6_coop_enabled() && (!mm6_net_locked() || mm6_coop_independent());
+    (void)ctx;if(!strcmp(item->key,"mm6.coop_wait"))return mm6_coop_enabled() && !mm6_net_locked();
+    return !strcmp(item->key,"mm6.coop_view") && mm6_coop_enabled() && (!mm6_net_locked() || mm6_coop_independent());
 }
 static bool menu_netplay_allowed(void *ctx,const RecompRuntimeUiItem *item,int value){
     (void)ctx;return item && !strcmp(item->key,"mm6.coop_view") && value>=1 && value<=3 && mm6_coop_enabled() && mm6_coop_independent();
 }
 static const char *const view_choices[]={"Shared screen","Split screen","Player one","Player two"};
+static const char *const wait_choices[]={"Either player can lead","Wait for both players"};
 static const RecompRuntimeUiItem menu_items[]={
     {.key="mm6.coop_view",.section="Display",.label="Two-player view",
      .description="Choose a shared screen, split screen, or either player.",
-     .type=RECOMP_RUNTIME_UI_CHOICE,.minimum=0,.maximum=3,.step=1,.choices=view_choices,.choice_count=4}
+     .type=RECOMP_RUNTIME_UI_CHOICE,.minimum=0,.maximum=3,.step=1,.choices=view_choices,.choice_count=4},
+    {.key="mm6.coop_wait",.section="Gameplay",.label="Room transitions",
+     .description="Choose whether either player can lead or both must approach an exit.",
+     .type=RECOMP_RUNTIME_UI_CHOICE,.minimum=0,.maximum=1,.step=1,.choices=wait_choices,.choice_count=2}
 };
 static const RecompRuntimeUiCallbacks menu_callbacks={.get_value=menu_get,.set_value=menu_set,.is_enabled=menu_enabled};
 #endif
@@ -323,6 +338,7 @@ const CycHostExtras *cyc_host_extras(void) {
         {"--proto-start",true,"protoman|megaman: starting character"},
         {"--coop",true,"on|off: development native coroutine controls prototype"},
         {"--coop-roster",true,"megaman-protoman|protoman-megaman: development roster"},
+        {"--coop-wait",true,"either|both: room exit admission policy"},
         {"--no-flicker",true,"on|off: complete native sprite presentation"},
         {"--slowdown-reduction",true,"on|off: extra native CPU time to reduce slowdown"},
         {"--world-audit",true,"FILE: native horizontal terrain conformance for QA"},

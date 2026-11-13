@@ -14,7 +14,7 @@ static int s_sealed,s_applying,s_width=256;
 static unsigned s_cli;
 enum {CLI_COOP=1u<<0,CLI_VIEW=1u<<1,CLI_ROSTER=1u<<2,CLI_PROTO=1u<<3,
       CLI_MODE=1u<<4,CLI_START=1u<<5,CLI_WEAPONS=1u<<6,CLI_WIDE=1u<<7,
-      CLI_FLICKER=1u<<8,CLI_LINES=1u<<9,CLI_QA=1u<<10};
+      CLI_FLICKER=1u<<8,CLI_LINES=1u<<9,CLI_QA=1u<<10,CLI_WAIT=1u<<11};
 int mm6_net_locked(void){return s_sealed && !s_applying;}
 int mm6_net_simulation_width(int local){return s_sealed?s_width:local;}
 int mm6_net_view_allowed(int mode){return mode>=0 && mode<=3 && (!mm6_net_locked() || (mm6_coop_independent() && mode>0));}
@@ -23,6 +23,7 @@ void mm6_net_note_option(const char *name){
     if(!strcmp(name,"--coop"))s_cli|=CLI_COOP;
     if(!strcmp(name,"--coop-view"))s_cli|=CLI_VIEW;
     if(!strcmp(name,"--coop-roster"))s_cli|=CLI_ROSTER;
+    if(!strcmp(name,"--coop-wait"))s_cli|=CLI_WAIT;
     if(!strcmp(name,"--protoman"))s_cli|=CLI_PROTO;
     if(!strcmp(name,"--proto-mode"))s_cli|=CLI_MODE;
     if(!strcmp(name,"--proto-start"))s_cli|=CLI_START;
@@ -56,6 +57,7 @@ static Mm6Settings offer(void){
     if(!(s_cli&CLI_COOP))c.coop=selected(coop,"coop");
     c.independent=(s_cli&CLI_VIEW)?mm6_host_view_preference()!=0:!option_is(coop,"coop","coop-view","shared","shared");
     if(!(s_cli&CLI_ROSTER))c.roster=option_is(coop,"coop","player-one","protoman","megaman");
+    if(!(s_cli&CLI_WAIT))c.wait=option_is(coop,"coop","wait-for-both","both","either");
     if(!(s_cli&CLI_PROTO))c.proto=selected(proto,"protoman");
     if(!(s_cli&CLI_MODE))c.mode=option_is(proto,"protoman","mode","protoman","protoman");
     if(!(s_cli&CLI_START))c.start=option_is(proto,"protoman","start","protoman","protoman");
@@ -85,7 +87,7 @@ static int catalog_supported(void){
 }
 static int describe(Mm6Settings c,char *out,int cap){
     /* Native charge, slide and both adapters are always retained (mask7). */
-    return snprintf(out,cap,"1:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:7",c.coop,c.independent,c.roster,c.proto,c.mode,c.start,c.weapons,c.wide,c.flicker,c.lines);
+    return snprintf(out,cap,"2:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:7",c.coop,c.independent,c.roster,c.proto,c.mode,c.start,c.weapons,c.wide,c.flicker,c.lines,c.wait);
 }
 static int settings_get(char *out,int cap){return describe(mm6_host_settings(),out,cap);}
 static int settings_offer(char *out,int cap){return describe(offer(),out,cap);}
@@ -97,15 +99,15 @@ static void preserve_offline(void){
 }
 static int bit(int n){return n==0 || n==1;}
 static int settings_apply(const char *value){
-    int v[12];const char *cursor=value;
+    int v[13];const char *cursor=value;
     if((s_cli&CLI_QA) || !catalog_supported())return 0;
-    for(int i=0;i<12;i++){
+    for(int i=0;i<13;i++){
         char *end;long n=strtol(cursor,&end,10);
-        if(end==cursor || n<0 || n>262 || (i<11?*end!=':':*end))return 0;
+        if(end==cursor || n<0 || n>262 || (i<12?*end!=':':*end))return 0;
         v[i]=(int)n;cursor=end+1;
     }
-    Mm6Settings c={v[1],v[2],v[3],v[4],v[5],v[6],v[7],v[8],v[9],v[10]};
-    if(v[0]!=1 || v[11]!=7 || c.coop!=1 || c.proto!=1 || !bit(c.independent) || !bit(c.roster) || !bit(c.mode) || !bit(c.start) ||
+    Mm6Settings c={v[1],v[2],v[3],v[4],v[5],v[6],v[7],v[8],v[9],v[10],v[11]};
+    if(v[0]!=2 || v[12]!=7 || !bit(c.wait) || c.coop!=1 || c.proto!=1 || !bit(c.independent) || !bit(c.roster) || !bit(c.mode) || !bit(c.start) ||
         !bit(c.weapons) || !bit(c.wide) || !bit(c.flicker) || (c.lines!=0 && c.lines!=262) || (c.independent && s_width!=256))return 0;
     preserve_offline();s_applying=1;
     int ok=mm6_host_apply_settings(c,nes_netplay_local_slot());
