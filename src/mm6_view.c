@@ -5,6 +5,7 @@
 #include "mm6_world.h"
 #include "mm6_wide.h"
 #include "mm6_hud.h"
+#include "mm6_menu.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
 #include "cyc_video.h"
@@ -172,6 +173,7 @@ static int panels(uint32_t *out,int width,int height){
 }
 static int render(uint32_t *out,int W,int H,int native_x0,const uint32_t *native,void *ctx) {
     (void)ctx;(void)native_x0;(void)native;
+    if(mm6_menu_draw(out,W,H,native))return 1;
     if(cyc_mod_peek(0x3a0)!=4 || (cyc_mod_peek(0x3b7)&2))return 0;
     if(mm6_coop_independent() && cyc_render_background(s_bg) && panels(out,W,H))return 1;
     int replace=s_enabled && s_frame.valid && s_frame.body.active==1;

@@ -5,6 +5,7 @@
 #include "mm6_coop.h"
 #include "mm6_charge.h"
 #include "mm6_net.h"
+#include "mm6_menu.h"
 #include "cyc_core.h"
 #include "cyc_host_extras.h"
 #include "cyc_tcp.h"
@@ -148,7 +149,7 @@ static void input(void *ctx,uint8_t buttons[2]) {
         else if(fresh)p->pending=(uint8_t)fresh;
         p->previous=(uint8_t)held;
     }
-    mm6_coop_input(buttons);
+    mm6_menu_input(buttons);mm6_coop_input(buttons);
 }
 static void power(void *ctx) {
     (void)ctx;memset(s_players,0,sizeof s_players);mm6_coop_power();mm6_proto_power();mm6_wide_power();free(s_cart);s_cart=NULL;
@@ -161,7 +162,7 @@ static void power(void *ctx) {
 }
 static void state_loaded(void *ctx){(void)ctx;cyc_set_extra_scanlines(s_lines);}
 static void end(void *ctx) {
-    (void)ctx;if(!safe())S.pending=0;mm6_proto_end();mm6_coop_end();mm6_charge_end();
+    (void)ctx;if(!safe())S.pending=0;mm6_proto_end();mm6_coop_end();mm6_charge_end();mm6_menu_frame();
     char fields[512],coop[1024],wide[256];mm6_proto_json(fields,sizeof fields);mm6_coop_json(coop,sizeof coop);mm6_wide_json(wide,sizeof wide);
     if(s_log)fprintf(s_log,"{\"frame\":%u,\"weapon\":%u,\"form\":%u,\"terrain\":%u,\"pose_kind\":%u,\"hurt\":%u,\"hp\":%u,\"charge\":%u,\"held\":%u,\"cpu_lines\":%u,\"changes\":%llu,%s,%s,%s}\n",
         cyc_ring_frame,R(0x699),R(0x9b),R(0xa7),R(0x94),S.hurt,R(0x3e5),R(0x9e),S.previous,cyc_extra_scanlines(),(unsigned long long)S.changes,fields,coop,wide);

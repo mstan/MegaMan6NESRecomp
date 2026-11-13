@@ -4,6 +4,7 @@
 #include "mm6_charge.h"
 #include "mm6_world.h"
 #include "mm6_wide.h"
+#include "mm6_menu.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
 #include "cyc_video.h"
@@ -15,7 +16,7 @@
 #include <string.h>
 #define R(a) cyc_mod_peek((uint16_t)(a))
 #define P(a,v) cyc_mod_poke((uint16_t)(a),(uint8_t)(v))
-enum { PERSONAL_CAP=320,PART_CAP=512 };
+enum { PERSONAL_CAP=MM6_PERSONAL_CAP,PART_CAP=512 };
 typedef struct {uint8_t ram[PERSONAL_CAP];} Player;
 typedef struct {int16_t x,y;uint8_t owner,attr,colors[4],pixels[64];} Part;
 typedef struct {uint8_t valid,seat;uint16_t count,camera;Mm6ProtoBody body;Part parts[PART_CAP];} Picture;
@@ -106,6 +107,20 @@ static void test_pokes(void){
 int mm6_coop_read(int seat,int a){
     if(seat<0 || seat>1 || a<0 || a>=2048)return 0;
     return C.initialized && seat!=C.owner?personal(&C.player[seat],a):R(a);
+}
+void mm6_coop_menu_copy(int seat,uint8_t out[MM6_PERSONAL_CAP]){
+    memset(out,0,MM6_PERSONAL_CAP);for(int i=0;i<s_count;i++)out[i]=(uint8_t)mm6_coop_read(seat,s_addr[i]);
+}
+void mm6_coop_menu_capture(uint8_t out[MM6_PERSONAL_CAP]){
+    memset(out,0,MM6_PERSONAL_CAP);for(int i=0;i<s_count;i++)out[i]=R(s_addr[i]);
+}
+void mm6_coop_menu_project(const uint8_t in[MM6_PERSONAL_CAP]){
+    for(int i=0;i<s_count;i++)P(s_addr[i],in[i]);
+}
+void mm6_coop_menu_commit(int seat,const uint8_t in[MM6_PERSONAL_CAP]){
+    if(!C.initialized || seat<0 || seat>1)return;
+    memcpy(C.player[seat].ram,in,MM6_PERSONAL_CAP);
+    if(seat==C.owner)project(&C.player[seat]);
 }
 void mm6_coop_colors(int seat,const uint8_t colors[8]){
     if(!C.initialized || seat<0 || seat>1)return;
@@ -477,9 +492,10 @@ void mm6_coop_draw(uint32_t *out,int width,int origin,const uint8_t *opaque,uint
         }
     }
 }
-void mm6_coop_power(void){memset(&C,0,sizeof C);addresses();mm6_charge_power();}
+void mm6_coop_power(void){memset(&C,0,sizeof C);addresses();mm6_charge_power();mm6_menu_power();}
 void mm6_coop_set(int enabled,int roster){
     s_on=enabled!=0;s_roster=roster!=0;
+    if(!s_on)mm6_menu_power();
     /* Keep ownership of the injected return frame until both native RTSes
      * complete. All ordinary co-op hooks may stop immediately. */
     if(!C.source_pending)C.initialized=C.eligible=C.owner=C.anchor=C.guest_round=C.scene=C.inventory_pending=0;
@@ -515,6 +531,7 @@ static int set(const uint8_t *in,int len){
     return 1;
 }
 void mm6_coop_register(void){
+    mm6_menu_register();
     mm6_charge_register();
     addresses();nes_mod_register_function_entry_plugin("mm6.coop.begin",0xE41C,begin);nes_mod_register_function_entry_plugin("mm6.coop.actor-end",0xE47A,actor_end);
     nes_mod_register_function_entry_plugin("mm6.coop.animation-stop",0xE24B,animation_stop);

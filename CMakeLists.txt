@@ -33,7 +33,7 @@ nesrecomp_add_cycle_game(MegaMan6Recomp ROM "${NESRECOMP_ROM}"
     GAME_CONFIG "${CMAKE_SOURCE_DIR}/game.toml" SEED_FILE "${CMAKE_SOURCE_DIR}/cyc_seeds_usa.txt" GAME_ID "mega-man-6-usa"
     PLAYERS 2 REGION NTSC MODS GAME_ID "mega-man-6-usa"
     HOST_EXTRAS "${CMAKE_SOURCE_DIR}/src/mm6_host.c" "${CMAKE_SOURCE_DIR}/src/mm6_net.c" "${CMAKE_SOURCE_DIR}/src/mm6_proto.c"
-        "${CMAKE_SOURCE_DIR}/src/mm6_view.c" "${CMAKE_SOURCE_DIR}/src/mm6_coop.c" "${CMAKE_SOURCE_DIR}/src/mm6_charge.c" "${CMAKE_SOURCE_DIR}/src/mm6_sprites.c" "${CMAKE_SOURCE_DIR}/src/mm6_world.c" "${CMAKE_SOURCE_DIR}/src/mm6_wide.c" "${CMAKE_SOURCE_DIR}/src/mm6_hud.c"
+        "${CMAKE_SOURCE_DIR}/src/mm6_view.c" "${CMAKE_SOURCE_DIR}/src/mm6_coop.c" "${CMAKE_SOURCE_DIR}/src/mm6_menu.c" "${CMAKE_SOURCE_DIR}/src/mm6_charge.c" "${CMAKE_SOURCE_DIR}/src/mm6_sprites.c" "${CMAKE_SOURCE_DIR}/src/mm6_world.c" "${CMAKE_SOURCE_DIR}/src/mm6_wide.c" "${CMAKE_SOURCE_DIR}/src/mm6_hud.c"
         "${NESRECOMP_ROOT}/runner/cyc/cyc_protoman_atlas.c")
 target_include_directories(MegaMan6Recomp PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_BINARY_DIR}" "${NESRECOMP_ROOT}/runner/src")
 target_compile_definitions(MegaMan6Recomp PRIVATE MM6_NETPLAY_QUALIFIED=$<BOOL:${MM6_NETPLAY_QUALIFIED}>)

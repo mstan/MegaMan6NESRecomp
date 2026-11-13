@@ -112,7 +112,9 @@ Ordinary actors activate across the union of the two views, excluding the empty 
 python tools/qa_views.py --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/views
 ```
 
-This is an initial local implementation. Complete weapon and adapter behavior, checkpoint revival, withdrawal/rejoin, complete stage transitions, independent personal menus, scripted/vertical view coordination, complete adaptive widescreen and online play remain unfinished. Online sessions are explicitly blocked while these development features are active.
+Split and individual views provide native personal inventories while the original pauser holds the common world clock. Each player can select equipment independently; only the pauser resumes play. Shared E-tanks are consumed in a deterministic order, with the pauser first when both request the last tank. A guest's native refill completes before play resumes. The pauser's own menu retains the original pixels, and Proto Man has matching header portraits for Normal, Jet and Power. Different weapon and adapter choices, both pausers, native/interpreter execution and current-build cold picture/state/audio continuation have targeted coverage.
+
+Complete weapon and adapter behavior, checkpoint revival, withdrawal/rejoin, remaining stage transitions, scripted/vertical view coordination, complete adaptive widescreen and online qualification remain unfinished. Online sessions are explicitly blocked while these development features are active.
 
 ```text
 python tools/qa_route.py tests/routes/coop-controls.route --frames 4700 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-controls --extra=--coop --extra=on

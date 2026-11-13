@@ -386,3 +386,69 @@ id = "mm6.coop.source-loaded"
 addr = 0xDC5A
 length = 8
 crc32 = 0x4D43BAAD
+
+[[mod_function_hook]]
+id = "mm6.menu.open"
+addr = 0x9366
+length = 8
+crc32 = 0x19844E7A
+
+[[mod_function_hook]]
+id = "mm6.menu.close"
+addr = 0x958E
+length = 8
+crc32 = 0x56BA580B
+
+[[mod_function_hook]]
+id = "mm6.menu.form-loop"
+addr = 0x9391
+length = 8
+crc32 = 0xE32A9244
+
+[[mod_function_hook]]
+id = "mm6.menu.weapon-loop"
+addr = 0x9465
+length = 8
+crc32 = 0x5DE7E867
+
+[[mod_function_hook]]
+id = "mm6.menu.tank-loop"
+addr = 0x950F
+length = 8
+crc32 = 0x5DE7E867
+
+[[mod_function_hook]]
+id = "mm6.menu.confirm"
+addr = 0x958A
+length = 8
+crc32 = 0xCD294DC3
+
+[[mod_function_hook]]
+id = "mm6.menu.heal"
+addr = 0x953D
+length = 8
+crc32 = 0x647DCDD8
+
+[[mod_function_hook]]
+id = "mm6.menu.personal-end"
+addr = 0x95FD
+length = 8
+crc32 = 0x052F2C6B
+
+[[mod_function_hook]]
+id = "mm6.menu.wait"
+addr = 0xC5F6
+length = 8
+crc32 = 0x2C0BE165
+
+[[mod_function_hook]]
+id = "mm6.menu.wait-input"
+addr = 0xC62B
+length = 8
+crc32 = 0xBE9697B6
+
+[[mod_function_hook]]
+id = "mm6.menu.form-confirm"
+addr = 0x965F
+length = 8
+crc32 = 0xEDC23F7F
