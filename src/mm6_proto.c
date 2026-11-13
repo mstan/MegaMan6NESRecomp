@@ -154,6 +154,11 @@ void mm6_proto_body(Mm6ProtoBody *b) {
     b->right=(R(0x3b7)&64)!=0;b->flipped=(R(0x3b7)&128)!=0;b->behind=(R(0x3b7)&32)!=0;
     b->weapon=R(0x699);b->charge=R(0x9e);b->form=R(0x9b)<=2?R(0x9b):0;
     for(int i=0;i<8;i++)b->palette[i]=R(0x370+i);
+    int beam=mm6_coop_teleport(mm6_coop_seat());
+    if(beam && R(0x3A0)==4 && R(0x3E5)<28){
+        b->active=1;b->pose=CYC_PROTO_TELEPORT;b->weapon=b->charge=b->form=0;
+        b->native_palette=(uint8_t)!mm6_proto_selected();b->y-=(int16_t)((beam>0?beam-1:32+beam)*16);return;
+    }
     int kind=R(0x94),phase=(R(0x510)/2)&3,firing=R(0x98)!=0 || R(0x9d)!=0;
     static const int run[]={0,1,2,1};
     if(S.teleport) {b->pose=CYC_PROTO_TELEPORT;b->y-=(S.teleport<=16?S.teleport-1:32-S.teleport)*16;}

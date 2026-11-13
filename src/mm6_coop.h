@@ -12,6 +12,8 @@ int mm6_coop_has_frame(void);
 void mm6_coop_draw(uint32_t *out,int width,int origin,const uint8_t *opaque,uint8_t *claimed);
 int mm6_coop_enabled(void);
 int mm6_coop_ready(void);
+int mm6_coop_live(int seat);
+int mm6_coop_teleport(int seat);
 int mm6_coop_seat(void);
 int mm6_coop_character(void);
 int mm6_coop_character_for(int seat);

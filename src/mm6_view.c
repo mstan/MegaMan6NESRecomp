@@ -70,7 +70,7 @@ static int animation(uint16_t address) {
 static uint32_t color(int index,const Mm6ProtoBody *b) {
     const CycProtoAtlas *atlas=mm6_proto_atlas();uint32_t c=atlas->colors[index-1];
     unsigned red=(c>>16)&255,green=(c>>8)&255,blue=c&255;
-    if(b->weapon || b->charge>=0x24) {
+    if(b->native_palette || b->weapon || b->charge>=0x24) {
         if(!red && !green && !blue)c=cyc_render_color_value(b->palette[1]);
         else if(red==green && green==blue && red>32 && red<240)c=cyc_render_color_value(b->palette[2]);
         else if(red>64 && red>green+blue)c=cyc_render_color_value(b->palette[3]);
@@ -244,16 +244,16 @@ void mm6_view_wide(int enabled,const char *aspect){
 }
 static int get(uint8_t *out,int cap) {
     if(cap<sizeof s_build+sizeof s_frame)return -1;
-    memcpy(s_build.magic,"M6V2",4);memcpy(s_frame.magic,"M6V2",4);
+    memcpy(s_build.magic,"M6V3",4);memcpy(s_frame.magic,"M6V3",4);
     memcpy(out,&s_build,sizeof s_build);memcpy(out+sizeof s_build,&s_frame,sizeof s_frame);return sizeof s_build+sizeof s_frame;
 }
 static int valid(const uint8_t *in,int len) {
     if(!len)return !(s_enabled || s_coop || s_no_flicker || s_wide);if(!in || len!=sizeof s_build+sizeof s_frame)return 0;
     ViewFrame p[2];memcpy(p,in,sizeof p);
     for(int i=0;i<2;i++) {
-        if(memcmp(p[i].magic,"M6V2",4) || p[i].valid>1 || p[i].panels>1 || p[i].native_scene>1 || (p[i].owner>22 && p[i].owner!=255))return 0;
+        if(memcmp(p[i].magic,"M6V3",4) || p[i].valid>1 || p[i].panels>1 || p[i].native_scene>1 || (p[i].owner>22 && p[i].owner!=255))return 0;
         const Mm6ProtoBody *b=&p[i].body;
-        if(b->pose>=CYC_PROTO_POSE_COUNT || b->active>2 || b->right>1 || b->flipped>1 || b->behind>1 || b->form>2 || (b->active==2 && !b->form))return 0;
+        if(b->pose>=CYC_PROTO_POSE_COUNT || b->active>2 || b->right>1 || b->flipped>1 || b->behind>1 || b->form>2 || b->native_palette>1 || (b->active==2 && !b->form))return 0;
         for(int j=0;j<64;j++)if(p[i].owners[j]>22 && p[i].owners[j]!=255)return 0;
         for(int s=0;s<2;s++)for(int y=0;y<30;y++)for(int x=0;x<33;x++)if(p[i].palettes[s][y][x]>3 || p[i].present[s][y][x]>1)return 0;
     }

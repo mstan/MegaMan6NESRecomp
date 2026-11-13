@@ -163,7 +163,7 @@ static void power(void *ctx) {
 static void state_loaded(void *ctx){(void)ctx;cyc_set_extra_scanlines(s_lines);}
 static void end(void *ctx) {
     (void)ctx;if(!safe())S.pending=0;mm6_proto_end();mm6_coop_end();mm6_charge_end();mm6_menu_frame();
-    char fields[512],coop[1024],wide[256];mm6_proto_json(fields,sizeof fields);mm6_coop_json(coop,sizeof coop);mm6_wide_json(wide,sizeof wide);
+    char fields[512],coop[2048],wide[256];mm6_proto_json(fields,sizeof fields);mm6_coop_json(coop,sizeof coop);mm6_wide_json(wide,sizeof wide);
     if(s_log)fprintf(s_log,"{\"frame\":%u,\"weapon\":%u,\"form\":%u,\"terrain\":%u,\"pose_kind\":%u,\"hurt\":%u,\"hp\":%u,\"charge\":%u,\"held\":%u,\"cpu_lines\":%u,\"changes\":%llu,%s,%s,%s}\n",
         cyc_ring_frame,R(0x699),R(0x9b),R(0xa7),R(0x94),S.hurt,R(0x3e5),R(0x9e),S.previous,cyc_extra_scanlines(),(unsigned long long)S.changes,fields,coop,wide);
 }
@@ -287,7 +287,7 @@ static void tcp_state(int id,const char *line){
         if(mode<0 || !mm6_coop_enabled() || !mm6_net_view_allowed(mode)){cyc_tcp_err(id,"view needs active co-op and an allowed shared|split|player1|player2 layout");return;}
         mm6_host_view_set(mode);
     }
-    char fields[1024];int n=snprintf(fields,sizeof fields,"\"view\":%d,",mm6_coop_view_mode());
+    char fields[2048];int n=snprintf(fields,sizeof fields,"\"view\":%d,",mm6_coop_view_mode());
     mm6_coop_json(fields+n,sizeof fields-n);cyc_tcp_ok(id,fields);
 }
 static void tcp(void *ctx){(void)ctx;cyc_tcp_register("mm6_state","MM6 co-op state and local view selection",tcp_state);}

@@ -49,7 +49,7 @@ static int boundary(uint16_t a){
             M.preview_valid[seat]=0;
             M.sound[seat]=0xFF;
             M.equipped_form[seat]=M.choice[seat].form;
-            M.usable[seat]=(uint8_t)(mm6_coop_read(seat,0x3A0)!=0 && M.choice[seat].hp<28);
+            M.usable[seat]=(uint8_t)mm6_coop_live(seat);
             if(M.choice[seat].hp>27)M.choice[seat].hp=0;
         }
     }

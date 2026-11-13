@@ -4,7 +4,7 @@
 #include <stdint.h>
 typedef struct {
     int16_t x,y;
-    uint8_t pose,right,flipped,behind,active,weapon,charge,form;
+    uint8_t pose,right,flipped,behind,active,weapon,charge,form,native_palette;
     uint8_t palette[8];
 } Mm6ProtoBody;
 /* active: 0 native, 1 complete Proto pose, 2 native adapter with Proto head. */
