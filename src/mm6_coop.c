@@ -451,7 +451,11 @@ static int shot_hit(uint16_t address){
 }
 static int boss_lethal(uint16_t address){
     if(address==0x9A18 || address==0x9AFA){if(R(0x4A)!=0x31)return 0;}
-    if(!s_on || !C.initialized || cyc_mod_isolated() || !R(0x642) || R(0x3ED)<128 || !C.damage_owner[8])return 0;
+    if(!s_on || !C.initialized || cyc_mod_isolated() || !R(0x642) || R(0x3ED)<128)return 0;
+    /* The final encounter refills twice with new native boss actors. Those
+     * defeats keep ordinary co-op running; only the capsule owns victory. */
+    if(R(0x51)==15 && R(0x3A8)!=0xF2){target_end();return 0;}
+    if(!C.damage_owner[8])return 0;
     int seat=C.damage_owner[8]-1;
     if(!mm6_coop_live(seat))return 0;
     /* A boss may die while its AI observes a temporarily projected body.
@@ -519,6 +523,10 @@ static void initialize(void){
 }
 static int begin(uint16_t address){
     (void)address;if(cyc_mod_isolated())return 0;
+    /* The captured-Wily actor starts the cartridge's ending without CD67's
+     * normal scene dispatch. Retire the extra controller before its native
+     * escape/credits tasks create and move their original single body. */
+    if(s_on && C.initialized && R(0x51)==15 && R(0x3A8)==0xE9)return global_scene(address);
     if(C.source_pending==2){
         for(int i=0;i<4;i++)P(0x100|((C.source_regs.s-3+i)&255),C.source_stack[i]);
         cyc_mod_set_regs(&C.source_regs);C.source_pending=0;
