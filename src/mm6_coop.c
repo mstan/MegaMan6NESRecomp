@@ -13,6 +13,7 @@
 #include "mod_runtime.h"
 #include "mod_savestate.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #define R(a) cyc_mod_peek((uint16_t)(a))
 #define P(a,v) cyc_mod_poke((uint16_t)(a),(uint8_t)(v))
@@ -31,6 +32,8 @@ typedef struct {
     uint8_t inventory_pending,inventory_ammo[2][10];
     uint8_t source_pending,source_stack[4];CycModRegs source_regs;
     uint64_t source_handoffs[2];
+    uint8_t target_active,target_owner,target_actor,target_input[4];
+    uint64_t targets[2];
     Picture build,frame;
 } Coop;
 static Coop C;
@@ -91,6 +94,44 @@ static void project(const Player *p){
 }
 static int personal(const Player *p,int a){int i=s_index[a];return i?p->ram[i-1]:R(a);}
 static void put(Player *p,int a,int v){int i=s_index[a];if(i)p->ram[i-1]=(uint8_t)v;}
+/* Shared actors retain their native coroutine, slots, RNG and one update.
+ * Only the body they observe is selected; friendly actors/ammo stay owned. */
+static int target_field(int a){
+    return (a>=0x3A0 && a<=0x63B && (a-0x3A0)%23==0) ||
+        (a>=0x94 && a<=0xAE && a!=0xA9 && (a<0xAA || a>0xAC)) ||
+        a==0x22 || (a>=0x370 && a<=0x377);
+}
+static void target_capture(Player *p){for(int i=0;i<s_count;i++)if(target_field(s_addr[i]))p->ram[i]=R(s_addr[i]);}
+static void target_project(const Player *p){for(int i=0;i<s_count;i++)if(target_field(s_addr[i]))P(s_addr[i],p->ram[i]);}
+static int target_begin(uint16_t address){
+    (void)address;
+    if(!s_on || !C.initialized || C.target_active || C.source_pending || C.scene || cyc_mod_isolated() || (R(0x22)&128) || (R(0x3B7)&2))return 0;
+    CycModRegs r;cyc_mod_regs(&r);if(r.x<8 || r.x>=22 || !R(0x3A0+r.x))return 0;
+    target_capture(&C.player[C.owner]);
+    int chosen=C.owner,best=0x7FFFFFFF,x=(R(0x46F+r.x)<<8)|R(0x486+r.x),y=R(0x4CB+r.x);
+    for(int seat=0;seat<2;seat++)if(!C.dead[seat] && personal(&C.player[seat],0x3A0)==4 && personal(&C.player[seat],0x3E5)<28){
+        int distance=abs(x-((personal(&C.player[seat],0x46F)<<8)|personal(&C.player[seat],0x486)))+abs(y-personal(&C.player[seat],0x4CB));
+        if(distance<best){chosen=seat;best=distance;}
+    }
+    if(best==0x7FFFFFFF)return 0;
+    C.targets[chosen]++;
+    if(chosen==C.owner)return 0;
+    C.target_active=1;C.target_owner=C.owner;C.target_actor=r.x;
+    static const uint16_t input[]={0x40,0x42,0x99,0x9A};
+    for(int i=0;i<4;i++)C.target_input[i]=R(input[i]);
+    C.owner=(uint8_t)chosen;target_project(&C.player[chosen]);
+    P(0x40,C.raw[chosen]&~0x30);P(0x42,C.pending[chosen]&~0x30);
+    static const uint8_t horizontal[]={0,1,2,2};P(0x99,horizontal[C.raw[chosen]&3]);P(0x9A,C.pending[chosen]&128);
+    return 0;
+}
+static void target_end(void){
+    if(!C.target_active || R(0x8F)!=C.target_actor || cyc_mod_isolated())return;
+    target_capture(&C.player[C.owner]);C.owner=C.target_owner;target_project(&C.player[C.owner]);
+    static const uint16_t input[]={0x40,0x42,0x99,0x9A};
+    for(int i=0;i<4;i++)P(input[i],C.target_input[i]);
+    C.target_active=0;
+    if(!s_on)mm6_coop_set(0,s_roster);
+}
 int mm6_coop_test_poke(const char *value){
     unsigned frame,seat,address,byte;int n=0;addresses();
     if(!value || s_test_poke_count>=64 || sscanf(value,"%u:%u:%x:%x%n",&frame,&seat,&address,&byte,&n)!=4 ||
@@ -106,7 +147,7 @@ static void test_pokes(void){
 }
 int mm6_coop_read(int seat,int a){
     if(seat<0 || seat>1 || a<0 || a>=2048)return 0;
-    return C.initialized && seat!=C.owner?personal(&C.player[seat],a):R(a);
+    return C.initialized && (seat!=C.owner || (C.target_active && !target_field(a)))?personal(&C.player[seat],a):R(a);
 }
 void mm6_coop_menu_copy(int seat,uint8_t out[MM6_PERSONAL_CAP]){
     memset(out,0,MM6_PERSONAL_CAP);for(int i=0;i<s_count;i++)out[i]=(uint8_t)mm6_coop_read(seat,s_addr[i]);
@@ -350,6 +391,7 @@ static int begin(uint16_t address){
 }
 static int actor_end(uint16_t address){
     (void)address;
+    target_end();
     if(!s_on || !C.initialized || cyc_mod_isolated() || R(0x8F)!=0)return 0;
     mm6_charge_actor_end();
     capture(&C.player[C.owner]);C.updates[C.owner]++;
@@ -432,9 +474,10 @@ void mm6_coop_input(uint8_t buttons[2]){
         if((buttons[0]&12)==12)buttons[0]&=(uint8_t)~12;
     }
 }
-void mm6_coop_end(void){if(s_on && C.initialized){capture(&C.player[C.owner]);follow_room();}}
+void mm6_coop_end(void){if(s_on && C.initialized){if(C.target_active)target_capture(&C.player[C.owner]);else capture(&C.player[C.owner]);follow_room();}}
 static int animation_stop(uint16_t address){(void)address;return s_animating && cyc_mod_isolated();}
 void mm6_coop_build(void){
+    if(C.target_active)return;
     memset(&C.build,0,sizeof C.build);
     if(!s_on || !C.initialized || R(0x3A0)!=4 || (R(0x3B7)&2) || C.guest_round)return;
     if(!cyc_mod_isolate_begin())return;
@@ -498,10 +541,11 @@ void mm6_coop_set(int enabled,int roster){
     if(!s_on)mm6_menu_power();
     /* Keep ownership of the injected return frame until both native RTSes
      * complete. All ordinary co-op hooks may stop immediately. */
-    if(!C.source_pending)C.initialized=C.eligible=C.owner=C.anchor=C.guest_round=C.scene=C.inventory_pending=0;
+    if(!C.source_pending && !C.target_active)C.initialized=C.eligible=C.owner=C.anchor=C.guest_round=C.scene=C.inventory_pending=0;
     cyc_mod_set_ram_read_hook(s_on && s_view?personal_camera_read:NULL);
     mm6_charge_set(s_on);
-    nes_mod_set_function_hook_enabled("mm6.coop.begin",s_on || C.source_pending);nes_mod_set_function_hook_enabled("mm6.coop.actor-end",s_on);
+    nes_mod_set_function_hook_enabled("mm6.coop.begin",s_on || C.source_pending);nes_mod_set_function_hook_enabled("mm6.coop.actor-end",s_on || C.target_active);
+    nes_mod_set_function_hook_enabled("mm6.coop.target-begin",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.animation-stop",s_on);mm6_view_coop(s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.dying",s_on);nes_mod_set_function_hook_enabled("mm6.coop.pit",s_on);
     nes_mod_set_function_hook_enabled("mm6.coop.retry",s_on);
@@ -512,10 +556,11 @@ void mm6_coop_set(int enabled,int roster){
     nes_mod_set_local_only("MM6 native co-op prototype (unqualified netplay)",s_on);
     mm6_coop_view_set(s_view);
 }
-static int get(uint8_t *out,int cap){if(cap<sizeof C)return -1;memcpy(C.magic,"M6C7",4);C.enabled=(uint8_t)s_on;C.roster=(uint8_t)s_roster;memcpy(out,&C,sizeof C);return sizeof C;}
+static int get(uint8_t *out,int cap){if(cap<sizeof C)return -1;memcpy(C.magic,"M6C8",4);C.enabled=(uint8_t)s_on;C.roster=(uint8_t)s_roster;memcpy(out,&C,sizeof C);return sizeof C;}
 static int valid(const uint8_t *in,int len){
     if(!len)return !s_on;if(!in || len!=sizeof C)return 0;Coop p;memcpy(&p,in,sizeof p);
-    if(memcmp(p.magic,"M6C7",4) || p.enabled!=s_on || p.roster!=s_roster || p.initialized>1 || p.eligible>1 || p.owner>1 || p.anchor>1 || p.guest_round>1 || p.dead[0]>2 || p.dead[1]>2 || p.retry>2 || p.playing>1 || p.scene>3 || p.scene_leader>1 || p.inventory_pending>1 || p.source_pending>2 || (p.source_pending && (!p.initialized || p.guest_round || p.scene)) || (p.initialized && p.owner!=(p.anchor^p.guest_round)))return 0;
+    if(memcmp(p.magic,"M6C8",4) || p.enabled!=s_on || p.roster!=s_roster || p.initialized>1 || p.eligible>1 || p.owner>1 || p.anchor>1 || p.guest_round>1 || p.dead[0]>2 || p.dead[1]>2 || p.retry>2 || p.playing>1 || p.scene>3 || p.scene_leader>1 || p.inventory_pending>1 || p.source_pending>2 || (p.source_pending && (!p.initialized || p.guest_round || p.scene)) || (p.initialized && !p.target_active && p.owner!=(p.anchor^p.guest_round)))return 0;
+    if(p.target_active>1 || p.target_owner>1 || (p.target_active && (!p.initialized || p.guest_round || p.source_pending || p.scene || p.target_actor<8 || p.target_actor>=22 || p.target_owner!=p.anchor || p.owner==p.target_owner)))return 0;
     for(int i=0;i<23;i++)if(p.damage_owner[i]>2)return 0;
     const Picture *pictures[2]={&p.build,&p.frame};
     for(int k=0;k<2;k++){
@@ -528,12 +573,14 @@ static int set(const uint8_t *in,int len){
     if(!valid(in,len))return 0;if(len)memcpy(&C,in,sizeof C);else memset(&C,0,sizeof C);
     nes_mod_set_function_hook_enabled("mm6.coop.begin",s_on || C.source_pending);
     nes_mod_set_function_hook_enabled("mm6.coop.source-loaded",s_on || C.source_pending);
+    nes_mod_set_function_hook_enabled("mm6.coop.actor-end",s_on || C.target_active);
     return 1;
 }
 void mm6_coop_register(void){
     mm6_menu_register();
     mm6_charge_register();
     addresses();nes_mod_register_function_entry_plugin("mm6.coop.begin",0xE41C,begin);nes_mod_register_function_entry_plugin("mm6.coop.actor-end",0xE47A,actor_end);
+    nes_mod_register_function_entry_plugin("mm6.coop.target-begin",0xE43F,target_begin);
     nes_mod_register_function_entry_plugin("mm6.coop.animation-stop",0xE24B,animation_stop);
     nes_mod_register_function_entry_plugin("mm6.coop.dying",0x8E62,dying);
     nes_mod_register_function_entry_plugin("mm6.coop.pit",0x8F03,dying);
@@ -565,9 +612,11 @@ void mm6_coop_register(void){
     nes_mod_register_savestate_hook("mm6.coop",get,set);nes_mod_register_savestate_validator("mm6.coop",valid);
 }
 int mm6_coop_json(char *out,int cap){
-    return snprintf(out,cap,"\"coop\":{\"on\":%d,\"ready\":%u,\"owner\":%u,\"round\":%u,\"anchor\":%u,\"dead\":[%u,%u],\"retry\":%u,\"lives\":%u,\"world\":%llu,\"updates\":[%llu,%llu],\"scene\":%u,\"room_checks\":%llu,\"room_address\":%u,\"room_flags\":%u,\"inventory_pending\":%u,\"source_pending\":%u,\"source_handoffs\":[%llu,%llu],\"transitions\":[%llu,%llu],\"finishers\":[%llu,%llu],\"pages\":[%d,%d],\"ammo1\":[%d,%d],\"ammo7\":[%d,%d],\"players\":[[%d,%d,%d,%d,%d],[%d,%d,%d,%d,%d]]}",
+    int n=snprintf(out,cap,"\"coop\":{\"on\":%d,\"ready\":%u,\"owner\":%u,\"round\":%u,\"anchor\":%u,\"dead\":[%u,%u],\"retry\":%u,\"lives\":%u,\"world\":%llu,\"updates\":[%llu,%llu],\"scene\":%u,\"room_checks\":%llu,\"room_address\":%u,\"room_flags\":%u,\"inventory_pending\":%u,\"source_pending\":%u,\"source_handoffs\":[%llu,%llu],\"transitions\":[%llu,%llu],\"finishers\":[%llu,%llu],\"pages\":[%d,%d],\"ammo1\":[%d,%d],\"ammo7\":[%d,%d],\"players\":[[%d,%d,%d,%d,%d],[%d,%d,%d,%d,%d]]}",
         s_on,C.initialized,C.owner,C.guest_round,C.anchor,C.dead[0],C.dead[1],C.retry,R(0xA9),(unsigned long long)C.world,(unsigned long long)C.updates[0],(unsigned long long)C.updates[1],
         C.scene,(unsigned long long)C.room_checks,C.room_address,C.room_flags,C.inventory_pending,C.source_pending,(unsigned long long)C.source_handoffs[0],(unsigned long long)C.source_handoffs[1],(unsigned long long)C.transitions[0],(unsigned long long)C.transitions[1],(unsigned long long)C.finishers[0],(unsigned long long)C.finishers[1],mm6_coop_read(0,0x46F),mm6_coop_read(1,0x46F),mm6_coop_read(0,0x689),mm6_coop_read(1,0x689),mm6_coop_read(0,0x68F),mm6_coop_read(1,0x68F),
         mm6_coop_read(0,0x486),mm6_coop_read(0,0x4CB),mm6_coop_read(0,0x3E5),mm6_coop_read(0,0x94),mm6_coop_read(0,0x699),
         mm6_coop_read(1,0x486),mm6_coop_read(1,0x4CB),mm6_coop_read(1,0x3E5),mm6_coop_read(1,0x94),mm6_coop_read(1,0x699));
+    if(n>0 && n<cap && out[n-1]=='}')return n-1+snprintf(out+n-1,cap-n+1,",\"targets\":[%llu,%llu],\"target_active\":%u}",(unsigned long long)C.targets[0],(unsigned long long)C.targets[1],C.target_active);
+    return n;
 }

@@ -452,3 +452,9 @@ id = "mm6.menu.form-confirm"
 addr = 0x965F
 length = 8
 crc32 = 0xEDC23F7F
+
+[[mod_function_hook]]
+id = "mm6.coop.target-begin"
+addr = 0xE43F
+length = 8
+crc32 = 0xBD280C59
