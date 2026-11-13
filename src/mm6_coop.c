@@ -454,6 +454,10 @@ static int boss_lethal(uint16_t address){
     if(!s_on || !C.initialized || cyc_mod_isolated() || !R(0x642) || R(0x3ED)<128 || !C.damage_owner[8])return 0;
     int seat=C.damage_owner[8]-1;
     if(!mm6_coop_live(seat))return 0;
+    /* A boss may die while its AI observes a temporarily projected body.
+     * End that scope before promoting the credited attacker; otherwise its
+     * later restore would replace the victory owner with the old anchor. */
+    target_end();
     promote(seat);C.scene=3;C.scene_leader=(uint8_t)seat;C.finishers[seat]++;return 0;
 }
 static int stage_begin(uint16_t address){
@@ -545,7 +549,7 @@ static int actor_end(uint16_t address){
         P(0x8F,8);
     }else{
         int promoted=0;
-        if(!mm6_coop_live(C.anchor) && mm6_coop_live(C.anchor^1)){
+        if(C.scene!=3 && !mm6_coop_live(C.anchor) && mm6_coop_live(C.anchor^1)){
             C.anchor^=1;promoted=1;P(0x46,R(0x46)+1);
         }
         C.guest_round=0;C.owner=C.anchor;project(&C.player[C.owner]);
