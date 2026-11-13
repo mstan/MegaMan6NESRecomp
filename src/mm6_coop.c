@@ -493,7 +493,11 @@ static void initialize(void){
     C.owner=C.anchor=C.guest_round=0;C.initialized=1;
     capture(&C.player[0]);C.player[1]=C.player[0];
     mm6_proto_clone_animation(0,1);
-    int x=((R(0x46F)<<8)|R(0x486))-16;if(x<16)x=16;
+    /* A native entry may stand on a one-tile ledge. An unchecked offset can
+     * put the partner in a pit or spikes before its first controller update.
+     * Share the original safe body position unless nearby ground is proven. */
+    int x=(R(0x46F)<<8)|R(0x486),safe_x,safe_y;
+    if(safe_arrival(&safe_x,&safe_y))x=safe_x;
     put(&C.player[1],0x486,x);put(&C.player[1],0x46F,x>>8);
     for(int slot=1;slot<8;slot++)put(&C.player[1],0x3A0+slot,0);
     put(&C.player[1],0x9E,0);put(&C.player[1],0xA5,255);put(&C.player[1],0x22,0);
