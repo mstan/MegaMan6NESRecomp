@@ -11,7 +11,7 @@ cmake --build build --config Release --parallel 2
 
 Use `NESRECOMP_ROOT` and `NESRECOMP_RECOMP_UI` to select existing engine and launcher checkouts. Runtime tests use isolated configuration and explicit ROM paths.
 
-The feature branch contains native gameplay, character and co-op development. Native Mega Man 6 mechanics, including slide, charge and Rush adapters, remain the behavioral reference. Full gameplay parity and release acceptance are still in progress.
+Version 0.2.0 provides optional Proto Man, local and online co-op, and adaptive widescreen while retaining native slide, charge and Rush adapters. Fresh profiles enable Fit to screen, No sprite flicker, Reduce slowdown, quick weapon switching and VSync; saved choices remain in effect.
 
 ## Launcher selections and online sessions
 
@@ -19,7 +19,7 @@ The launcher exposes Proto Man, co-op, adaptive widescreen and slowdown reductio
 
 The online session profile adopts the host's roster, character behavior, native abilities, weapon controls, sprite policy, CPU budget and camera class before gameplay starts. It also verifies the cartridge and embedded character artwork, including the adapter-head policy. Shared online play uses a fixed common logical canvas; the physical windows can have different sizes. Independent views retain native 256-pixel grids and allow local Split, Player one and Player two choices within that camera class. Runtime changes cannot switch the agreed camera class. Leaving a match restores the prior runtime settings, catalog preferences, command-line precedence and video geometry.
 
-Netplay is built by default. `MM6_NETPLAY_QUALIFIED` remains `OFF` while broader game integration is unfinished; qualification builds explicitly enable it. The representative Shared profile has an actual delayed-input PC/server native/interpreter check with matching canonical state, rollback and current-build continuation evidence. Separate-view UI changes have targeted checks; a complete moving online Split run is not claimed by this slice.
+Netplay is built by default for compatible two-player profiles. Enable Co-op before hosting or joining a room. Peers agree on a fixed gameplay profile before the match; leaving restores offline preferences. Delayed-input checks cover native/interpreter execution, shared and independent views, rollback, restoration and moving carriers.
 
 A 5,220-frame route through stage selection, teleport, movement, camera scrolling, enemies and the inventory matches the interpreter at every frame. This is representative baseline evidence, not complete stage or enhancement acceptance.
 
@@ -29,7 +29,7 @@ python tools/qa_route.py tests/routes/boot-play.route --exe build/Release/MegaMa
 
 The route helper is adapted from MegaMan2NESRecomp under the included license and additional permissions. No game cartridge bytes or extracted donor assets are included.
 
-## Development adaptive widescreen
+## Adaptive widescreen
 
 `--wide on --aspect fit` extends horizontal terrain from the native layout, block, metatile and palette tables. Authored director records bound connected horizontal rooms; vertical and unrecognized scene layouts retain the native view. The original viewport remains intact, with its clipped left edge filled when that edge moves inside the wider picture.
 
@@ -39,7 +39,7 @@ MegaMan6Recomp.exe "/path/to/Mega Man 6 (USA).nes" --wide on --aspect fit --no-f
 
 Ordinary authored enemies in the added horizontal area use their original constructor, AI, projectiles and collision routines. The stage director stays on its native camera. Signed world positions place complete sprite packets without byte-wrapped duplicates in the original viewport. A killed authored enemy stays absent until its spawn position leaves the complete view, including when the native camera later reaches that position. Failed native allocations remain eligible for retry.
 
-Fit has targeted checks at 256, 426, 568 and 854 pixels, with native/interpreter agreement and current-build moving-scene continuation. Terrain conformance retains the original game's edge differences separately: each such pixel must be reproduced from live native CIRAM. An assisted combat route activates six authored actors, damages and kills two margin enemies through original shots, and retains their identities without immediate respawn. The 740-frame cold continuation reproduces the first picture and PCM; the sprite-limit option changes presentation while hardware execution and audio stay identical. Stock width matches the disabled extension. Actor pool pressure, all scenes and fresh launcher defaults remain in progress; these targeted checks do not establish complete widescreen acceptance.
+Fit has targeted checks at 256, 426, 568 and 854 pixels, with native/interpreter agreement and current-build moving-scene continuation. Terrain conformance retains the original game's edge differences separately: each such pixel must be reproduced from live native CIRAM. An assisted combat route activates six authored actors, damages and kills two margin enemies through original shots, and retains their identities without immediate respawn. The 740-frame cold continuation reproduces the first picture and PCM; the sprite-limit option changes presentation while hardware execution and audio stay identical. Stock width matches the disabled extension. Fresh packaged profiles use adaptive Fit, and saved aspect and mod choices remain in effect.
 
 ## Quick weapon switching
 
@@ -53,9 +53,9 @@ python tools/qa_controls.py --exe build/Release/MegaMan6Recomp.exe --rom "/path/
 
 The regression checks compare native/interpreter execution, ordinary gameplay with the feature idle or disabled, acquired/locked/empty equipment, native inventory graphics and palettes, player/menu input isolation, and held-input state continuation. This controls slice does not establish full adapter, character, co-op or stage acceptance.
 
-## Development Proto Man
+## Proto Man
 
-The command line exposes the initial optional solo implementation:
+Enable Proto Man in Mods or with the command line:
 
 ```text
 MegaMan6Recomp.exe "/path/to/Mega Man 6 (USA).nes" --protoman on --proto-mode protoman
@@ -65,7 +65,7 @@ Select swaps characters using a 32-frame teleport. Proto Man retains the native 
 
 Airborne firing shares the open-jump helmet and boot baseline. The native Buster starts at the matching cannon height in both directions, with ground and ladder origins retained.
 
-Native actor ownership identifies the body OAM parts; the compositor replaces those parts with the credited immutable sprite atlas. Native entry/effect animations retain their original artwork. Jet and Power adapters keep the original animated armor, wings, punches and exhaust, with Proto Man's credited helmet, visor and scarf replacing the native head. Fuel, attacks, movement and adapter restrictions continue through the original game routines. Inventory portraits, complete pose/projectile coverage and launcher activation remain unfinished.
+Native actor ownership identifies the body OAM parts; the compositor replaces those parts with the credited immutable sprite atlas. Native entry/effect animations retain their original artwork. Jet and Power adapters keep the original animated armor, wings, punches and exhaust, with Proto Man's credited helmet, visor and scarf replacing the native head. Fuel, attacks, movement and adapter restrictions continue through the original game routines. Native inventory portraits distinguish Normal, Jet and Power forms.
 
 The initial gallery matches native/interpreter execution for 4,800 frames in both modes. Mid-swap and mid-recoil loads reproduce memory and presentation; actual contact deals 6 damage with Proto Man traits and 3 in reskin mode with the same recoil. A real native pellet reflects into a native Buster shot, which damages an enemy while a special weapon is selected. Rear, grounded, firing and reskin cases retain native damage. Mid-reflection continuation matches the uninterrupted picture, memory and PCM. These are targeted checks, not complete game acceptance.
 
@@ -74,7 +74,7 @@ python tools/qa_route.py tests/routes/proto-gallery.route --frames 4800 --exe bu
 python tools/qa_route.py tests/routes/proto-reflected-target.route --frames 4040 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/reflection --extra=--protoman --extra=on
 ```
 
-## Development local co-op
+## Co-op
 
 ```text
 MegaMan6Recomp.exe "/path/to/Mega Man 6 (USA).nes" --coop on --weapon-cycle on
@@ -86,7 +86,7 @@ Either player can lead a native room transition. The room director and cartridge
 
 The optional **Room transitions** setting waits for both players at shutters and vertical exits. The first player's body waits at its native contact point while the partner and shared world keep running. The original scroll starts when the partner approaches the same exit. A lone survivor can continue. Choose the policy in the Co-op package or the runtime Gameplay menu; `--coop-wait either|both` provides the command-line equivalent. Online matches adopt the host's policy before gameplay and keep it fixed for the match.
 
-Targeted checks cover both leaders through Tomahawk Man's horizontal and vertical rooms, P2 opening both boss shutters, and a real P2 charged lethal hit through the native clear, password, stage selection and a fresh intro. Native/interpreter execution and cold loads during the vertical scroll and boss outro reproduce state, pictures and PCM. Both players can ride rising platforms and the native platforms made with charged shots, jump off and land again. Opening the native inventory pauses these platforms with the world. Final runtime, platform and packaged release acceptance remains in progress.
+Targeted checks cover both leaders through Tomahawk Man's horizontal and vertical rooms, P2 opening both boss shutters, and a real P2 charged lethal hit through the native clear, password, stage selection and a fresh intro. Native/interpreter execution and cold loads during the vertical scroll and boss outro reproduce state, pictures and PCM. Both players can ride rising platforms and the native platforms made with charged shots, jump off and land again. Opening the native inventory pauses these platforms with the world.
 
 Personal ammo also survives the global clear and selection screens. Actual native weapon grants and refills update both inventories; the weapon demonstration keeps its original single native body without replacing the other player's retained ammo. A native new-game reset discards the retained bank. Distinct-ammo, native-refill and new-weapon cases cover these boundaries, including a cold load while the personal inventories are pending in the password screen.
 
@@ -120,7 +120,7 @@ python tools/qa_views.py --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/
 
 Split and individual views provide native personal inventories while the original pauser holds the common world clock. Each player can select equipment independently; only the pauser resumes play. Shared E-tanks are consumed in a deterministic order, with the pauser first when both request the last tank. A guest's native refill completes before play resumes. The pauser's own menu retains the original pixels, and Proto Man has matching header portraits for Normal, Jet and Power. Different weapon and adapter choices, both pausers, native/interpreter execution and current-build cold picture/state/audio continuation have targeted coverage.
 
-Complete weapon and adapter behavior, checkpoint revival, withdrawal/rejoin, remaining stage transitions, scripted/vertical view coordination, complete adaptive widescreen and online qualification remain unfinished. Online sessions are explicitly blocked while these development features are active.
+Checkpoint recovery restores personal health and the Buster while retaining ammunition. A team wipe spends a shared life. Hold Select for 90 gameplay updates to withdraw; release and press it again to return beside a safely grounded partner. Shared and independent online policies keep their agreed gameplay profile for the match.
 
 ```text
 python tools/qa_route.py tests/routes/coop-controls.route --frames 4700 --exe build/Release/MegaMan6Recomp.exe --rom "/path/to/Mega Man 6 (USA).nes" --out qa/coop-controls --extra=--coop --extra=on
